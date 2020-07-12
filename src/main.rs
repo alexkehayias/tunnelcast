@@ -1,7 +1,39 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+use std::cmp::{Eq, PartialEq};
+use std::hash::Hash;
+
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use lazy_static::lazy_static;
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+enum CardId {
+    Shields,
+    Phasers,
+}
+
+lazy_static! {
+    static ref CARDS: HashMap<CardId, Card> = {
+        let mut m = HashMap::new();
+        let card_shields = Card {
+            name: "Shields",
+            effects: vec![Effect::Increase(Entity::Player, Attribute::Shields, 5)]
+        };
+
+        let card_phasers = Card {
+            name: "Phasers",
+            effects: vec![Effect::Increase(Entity::Player, Attribute::Shields, 5)]
+        };
+
+        m.insert(CardId::Shields, card_shields);
+        m.insert(CardId::Phasers, card_phasers);
+
+        m
+    };
+}
+
 
 #[derive(Debug)]
 enum Action {
@@ -40,8 +72,8 @@ struct Card {
 
 #[derive(Debug)]
 struct GameState {
-    deck: Vec<Card>,
-    hand: Vec<Card>,
+    deck: Vec<CardId>,
+    hand: Vec<CardId>,
     shields: u32,
     power: u32,
     weaponry: u32,
@@ -50,7 +82,7 @@ struct GameState {
 }
 
 impl GameState {
-    fn new(deck: Vec<Card>, hand: Vec<Card>) -> GameState {
+    fn new(deck: Vec<CardId>, hand: Vec<CardId>) -> GameState {
         GameState {
             deck,
             hand,
@@ -69,10 +101,10 @@ fn tick(game: &mut GameState) -> &mut GameState {
             if let Some(card) = game.deck.pop() {
                 game.hand.push(card);
             }
-            game
         },
         Action::PlayCard(idx) => {
-            let card = &game.hand[idx as usize];
+            let card_id = &game.hand[idx as usize];
+            let card = &CARDS[card_id];
 
             for fx in card.effects.iter() {
                 println!("Effect: {:?}", fx);
@@ -88,33 +120,24 @@ fn tick(game: &mut GameState) -> &mut GameState {
                     _ => ()
                 }
             }
-
-            game
         }
-        _ => game
+        _ => ()
     }
+
+    game
 }
 
-fn shuffle_deck(deck: &mut Vec<Card>) -> &mut Vec<Card> {
+fn shuffle_deck(deck: &mut Vec<CardId>) -> &mut Vec<CardId> {
     let mut rng = thread_rng();
     deck.shuffle(&mut rng);
     deck
 }
 
 fn main() {
-    let card_shields = Card {
-        name: "Shields",
-        effects: vec![Effect::Increase(Entity::Player, Attribute::Shields, 5)]
-    };
-
-    let card_phasers = Card {
-        name: "Phasers",
-        effects: vec![Effect::Increase(Entity::Player, Attribute::Shields, 5)]
-    };
 
     let mut init_deck = vec![
-        card_shields,
-        card_phasers,
+        CardId::Shields,
+        CardId::Phasers,
     ];
     shuffle_deck(&mut init_deck);
 
