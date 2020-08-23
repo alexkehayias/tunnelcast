@@ -44,17 +44,18 @@ struct Enemy {
 impl Entity for Enemy {}
 
 trait Effect: std::fmt::Debug {
-    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> HashMap<Attribute, i32>;
+    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> StateChange;
 }
 
 #[derive(Debug)]
 struct IncreaseShields;
 
 impl Effect for IncreaseShields {
-    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> HashMap<Attribute, i32> {
-        println!("Increasing shields!");
-        // TODO: Find state of the entity and mutate it
-        HashMap::new()
+    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> StateChange {
+        let mut m = HashMap::new();
+        m.insert(Attribute::Shields, 1u32);
+
+        m
     }
 }
 
@@ -62,7 +63,7 @@ impl Effect for IncreaseShields {
 struct DamageHull;
 
 impl Effect for DamageHull {
-    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> HashMap<Attribute, i32> {
+    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> StateChange {
         println!("Damage hull!");
         // TODO: Find state of the entity and mutate it
         HashMap::new()
@@ -78,7 +79,7 @@ struct Card {
 
 #[derive(Debug)]
 struct GameState {
-    cards: HashMap<CardId, Card>,
+    cards: CardCollection,
     deck: Vec<CardId>,
     draw: Vec<CardId>,
     hand: Vec<CardId>,
@@ -91,10 +92,10 @@ struct GameState {
     // buffs: Vec<Buff>
 }
 
-type StateChange = HashMap<Attribute, i32>;
+type StateChange = HashMap<Attribute, u32>;
 
 impl GameState {
-    fn new(cards: HashMap<CardId, Card>, deck: Vec<CardId>) -> GameState {
+    fn new(cards: CardCollection, deck: Vec<CardId>) -> GameState {
         GameState {
             cards: cards,
             deck: deck.clone(),
@@ -114,7 +115,10 @@ impl GameState {
     }
 
     fn apply_effect(&mut self, state_change: StateChange) {
-        println!("TODO: Apply the effect")
+        for (k, v) in state_change.iter() {
+            println!("TODO: Apply the effect {:?} with value {:?}", k, v);
+        }
+
     }
 }
 
@@ -129,7 +133,9 @@ fn tick(game: &mut GameState) -> &mut GameState {
         Action::PlayCard(ent_idx, card_idx) => {
             let entity = &game.entities[ent_idx as usize];
             let card_id = &game.hand[card_idx as usize];
-            let card = &game.cards[card_id];
+            let card = &game.cards
+                .get(card_id)
+                .unwrap_or_else(|| panic!("Could not find card with ID {:?}", card_id));
 
             let mut accum = HashMap::new();
             for fx in &card.effects {
@@ -174,47 +180,77 @@ fn add_enemy(game: &mut GameState, enemy: Enemy) -> &mut GameState {
     game
 }
 
+#[derive(Debug)]
+struct CardCollection {
+    inner: HashMap<CardId, Card>
+}
+
+impl CardCollection {
+    fn new() -> Self {
+        Self {inner: HashMap::new()}
+    }
+
+    fn insert(&mut self, card: Card) {
+        self.inner.insert(card.id, card);
+    }
+
+    fn get(&self, card_id: &CardId) -> Option<&Card> {
+        self.inner.get(card_id)
+    }
+}
+
 fn main() {
-    let mut cards = HashMap::new();
+}
 
-    let card_shields = Card {
-        id: CardId::Shields,
-        name: "Shields",
-        effects: vec![Box::new(IncreaseShields {})]
-    };
-    cards.insert(card_shields.id, card_shields);
 
-    let card_phasers = Card {
-        id: CardId::Phasers,
-        name: "Phasers",
-        effects: vec![Box::new(DamageHull {})]
-    };
-    cards.insert(card_phasers.id, card_phasers);
+mod test_game {
+    use super::*;
 
-    let mut init_deck = vec![
-        CardId::Shields,
-        CardId::Shields,
-        CardId::Shields,
-        CardId::Phasers,
-        CardId::Phasers,
-        CardId::Phasers,
-    ];
-    shuffle_deck(&mut init_deck);
+    #[test]
+    fn it_works() {
+        let mut cards = CardCollection::new();
 
-    let mut game = GameState::new(cards, init_deck);
+        cards.insert(
+            Card {
+                id: CardId::Shields,
+                name: "Shields",
+                effects: vec![Box::new(IncreaseShields {})]
+            }
+        );
 
-    // Add an opponent
-    let enemy = Enemy { hull: 10, shields: 0 };
-    add_enemy(&mut game, enemy);
+        cards.insert(
+            Card {
+                id: CardId::Phasers,
+                name: "Phasers",
+                effects: vec![Box::new(DamageHull {})]
+            }
+        );
 
-    // Draw a hand
-    draw_hand(&mut game, 4);
-    println!("State: {:?}", tick(&mut game));
+        let mut init_deck = vec![
+            CardId::Shields,
+            CardId::Shields,
+            CardId::Shields,
+            CardId::Phasers,
+            CardId::Phasers,
+            CardId::Phasers,
+        ];
+        shuffle_deck(&mut init_deck);
 
-    // Play a card
-    game.action = Action::PlayCard(0, 0);
-    println!("State: {:?}", tick(&mut game));
+        let mut game = GameState::new(cards, init_deck);
 
-    game.action = Action::PlayCard(0, 0);
-    println!("State: {:?}", tick(&mut game));
+        // Add an opponent
+        let enemy = Enemy { hull: 10, shields: 0 };
+        add_enemy(&mut game, enemy);
+
+        // Draw a hand
+        draw_hand(&mut game, 4);
+        println!("State: {:?}", tick(&mut game));
+
+        // Play a card
+        game.action = Action::PlayCard(0, 0);
+        println!("State: {:?}", tick(&mut game));
+
+        game.action = Action::PlayCard(0, 0);
+        println!("State: {:?}", tick(&mut game));
+    }
 }
