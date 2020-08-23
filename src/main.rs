@@ -30,30 +30,42 @@ enum Attribute {
     Hull,
 }
 
-trait Entity: std::fmt::Debug {}
+trait Entity: std::fmt::Debug {
+    fn get_state(&mut self) -> &mut State;
+}
 
+// For now, combining entities with state for simplicity.
 #[derive(Debug)]
-struct Player;
-impl Entity for Player {}
+struct Player {
+    state: State
+}
+impl Entity for Player {
+    fn get_state(&mut self) -> &mut State {
+        &mut self.state
+    }
+}
 
 #[derive(Debug)]
 struct Enemy {
-    hull: i32,
-    shields: i32,
+    state: State,
 }
-impl Entity for Enemy {}
+impl Entity for Enemy {
+    fn get_state(&mut self) -> &mut State {
+        &mut self.state
+    }
+}
 
 trait Effect: std::fmt::Debug {
-    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> StateChange;
+    fn calculate(&self, game: &GameState, ent_idx: i32) -> State;
 }
 
 #[derive(Debug)]
 struct IncreaseShields;
 
 impl Effect for IncreaseShields {
-    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> StateChange {
-        let mut m = HashMap::new();
-        m.insert(Attribute::Shields, 1u32);
+    fn calculate(&self, game: &GameState, ent_idx: i32) -> State {
+        let mut m = State::new();
+        m.insert(Attribute::Shields, 1i32);
 
         m
     }
@@ -63,10 +75,11 @@ impl Effect for IncreaseShields {
 struct DamageHull;
 
 impl Effect for DamageHull {
-    fn calculate(&self, game: &GameState, ent: &Box<dyn Entity>) -> StateChange {
-        println!("Damage hull!");
-        // TODO: Find state of the entity and mutate it
-        HashMap::new()
+    fn calculate(&self, game: &GameState, ent_idx: i32) -> State {
+        let mut m = State::new();
+        m.insert(Attribute::Hull, -1i32);
+
+        m
     }
 }
 
@@ -92,7 +105,8 @@ struct GameState {
     // buffs: Vec<Buff>
 }
 
-type StateChange = HashMap<Attribute, u32>;
+type State = HashMap<Attribute, i32>;
+type StateChange = (i32, HashMap<Attribute, i32>);
 
 impl GameState {
     fn new(cards: CardCollection, deck: Vec<CardId>) -> GameState {
@@ -110,13 +124,19 @@ impl GameState {
         }
     }
 
-    fn calculate_effect(&self, effect: &Box<dyn Effect>, entity: &Box<dyn Entity>) -> StateChange {
-        effect.calculate(self, entity)
-    }
-
     fn apply_effect(&mut self, state_change: StateChange) {
-        for (k, v) in state_change.iter() {
-            println!("TODO: Apply the effect {:?} with value {:?}", k, v);
+        println!("Applying state change {:?}", state_change);
+
+        let (ent_idx, state) = state_change;
+
+        let mut entity = self.entities.get_mut(ent_idx as usize)
+            .expect("Failed ot get entity");
+
+        // TODO replace with a fold
+        for (k, v) in state.iter() {
+            println!("Applying state {:?} with value {:?} to entity {:?}", k, v, ent_idx);
+            let mut state = entity.get_state();
+            *state.get_mut(k).unwrap() += v;
         }
 
     }
@@ -131,7 +151,6 @@ fn tick(game: &mut GameState) -> &mut GameState {
             }
         },
         Action::PlayCard(ent_idx, card_idx) => {
-            let entity = &game.entities[ent_idx as usize];
             let card_id = &game.hand[card_idx as usize];
             let card = &game.cards
                 .get(card_id)
@@ -140,7 +159,10 @@ fn tick(game: &mut GameState) -> &mut GameState {
             let mut accum = HashMap::new();
             for fx in &card.effects {
                 println!("Effect: {:?}", fx);
-                accum.extend(game.calculate_effect(fx, entity));
+                let effect = fx.calculate(&game, ent_idx);
+                // TODO merge with a sum fn. What this currently does
+                // is overwrite the value
+                accum.extend(effect);
             }
 
             // Move the card to the discard pile
@@ -150,7 +172,7 @@ fn tick(game: &mut GameState) -> &mut GameState {
             // This needs to happen after discard otherwise there is a
             // borrow error because card_id still immutably borrows
             // GameState and apply_effect needs a mutable reference
-            game.apply_effect(accum);
+            game.apply_effect((ent_idx, accum));
         }
         _ => ()
     }
@@ -239,7 +261,10 @@ mod test_game {
         let mut game = GameState::new(cards, init_deck);
 
         // Add an opponent
-        let enemy = Enemy { hull: 10, shields: 0 };
+        let mut s = State::new();
+        s.insert(Attribute::Hull, 10);
+        s.insert(Attribute::Shields, 10);
+        let enemy = Enemy { state: s };
         add_enemy(&mut game, enemy);
 
         // Draw a hand
