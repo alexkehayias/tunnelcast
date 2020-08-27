@@ -22,7 +22,7 @@ enum Action {
     EnemyTurn
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 enum Attribute {
     Shields,
     Weaponry,
@@ -156,13 +156,23 @@ fn tick(game: &mut GameState) -> &mut GameState {
                 .get(card_id)
                 .unwrap_or_else(|| panic!("Could not find card with ID {:?}", card_id));
 
-            let mut accum = HashMap::new();
+            let mut accum = State::new();
             for fx in &card.effects {
                 println!("Effect: {:?}", fx);
                 let effect = fx.calculate(&game, ent_idx);
-                // TODO merge with a sum fn. What this currently does
-                // is overwrite the value
-                accum.extend(effect);
+
+                // Merge the effect by summing it with any existing
+                // value in the accumumulator
+                accum = effect.iter()
+                    .fold(accum, |mut acc, (k, v)| {
+                        if let Some(val) = acc.get_mut(k) {
+                            *val += v;
+                        } else {
+                            acc.insert(*k, *v);
+                        };
+
+                        acc
+                    });
             }
 
             // Move the card to the discard pile
