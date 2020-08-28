@@ -128,15 +128,12 @@ impl GameState {
         println!("Applying state change {:?}", state_change);
 
         let (ent_idx, state) = state_change;
+        let mut entity_state = self.entities.get_mut(ent_idx as usize)
+            .expect("Failed ot get entity")
+            .get_state();
 
-        let mut entity = self.entities.get_mut(ent_idx as usize)
-            .expect("Failed ot get entity");
-
-        // TODO replace with a fold
         for (k, v) in state.iter() {
-            println!("Applying state {:?} with value {:?} to entity {:?}", k, v, ent_idx);
-            let mut state = entity.get_state();
-            *state.get_mut(k).unwrap() += v;
+            *entity_state.entry(*k).or_insert(0) += v;
         }
 
     }
@@ -163,16 +160,13 @@ fn tick(game: &mut GameState) -> &mut GameState {
 
                 // Merge the effect by summing it with any existing
                 // value in the accumumulator
-                accum = effect.iter()
-                    .fold(accum, |mut acc, (k, v)| {
-                        if let Some(val) = acc.get_mut(k) {
-                            *val += v;
-                        } else {
-                            acc.insert(*k, *v);
-                        };
-
-                        acc
-                    });
+                for (k, v) in effect.iter() {
+                    if let Some(val) = accum.get_mut(k) {
+                        *val += v;
+                    } else {
+                        accum.insert(*k, *v);
+                    };
+                }
             }
 
             // Move the card to the discard pile
