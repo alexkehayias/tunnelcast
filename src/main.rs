@@ -63,7 +63,7 @@ trait Effect: std::fmt::Debug {
 struct IncreaseShields;
 
 impl Effect for IncreaseShields {
-    fn calculate(&self, game: &GameState, ent_idx: i32) -> State {
+    fn calculate(&self, _game: &GameState, _ent_idx: i32) -> State {
         let mut m = State::new();
         m.insert(Attribute::Shields, 1i32);
 
@@ -75,7 +75,7 @@ impl Effect for IncreaseShields {
 struct DamageHull;
 
 impl Effect for DamageHull {
-    fn calculate(&self, game: &GameState, ent_idx: i32) -> State {
+    fn calculate(&self, _game: &GameState, _ent_idx: i32) -> State {
         let mut m = State::new();
         m.insert(Attribute::Hull, -1i32);
 
@@ -111,7 +111,7 @@ type StateChange = (i32, HashMap<Attribute, i32>);
 impl GameState {
     fn new(cards: CardCollection, deck: Vec<CardId>) -> GameState {
         GameState {
-            cards: cards,
+            cards,
             deck: deck.clone(),
             draw: deck,
             hand: vec![],
@@ -128,7 +128,7 @@ impl GameState {
         println!("Applying state change {:?}", state_change);
 
         let (ent_idx, state) = state_change;
-        let mut entity_state = self.entities.get_mut(ent_idx as usize)
+        let entity_state = self.entities.get_mut(ent_idx as usize)
             .expect("Failed ot get entity")
             .get_state();
 
