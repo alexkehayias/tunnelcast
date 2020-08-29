@@ -93,7 +93,6 @@ struct Card {
 #[derive(Debug)]
 struct GameState {
     cards: CardCollection,
-    deck: Vec<CardId>,
     draw: Vec<CardId>,
     hand: Vec<CardId>,
     discard: Vec<CardId>,
@@ -112,7 +111,6 @@ impl GameState {
     fn new(cards: CardCollection, deck: Vec<CardId>) -> GameState {
         GameState {
             cards,
-            deck: deck.clone(),
             draw: deck,
             hand: vec![],
             discard: vec![],
