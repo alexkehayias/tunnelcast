@@ -124,6 +124,11 @@ impl GameState {
         }
     }
 
+    fn add_entity(&mut self, entity: Box<dyn Entity>) -> &mut Self {
+        self.entities.push(entity);
+        self
+    }
+
     fn apply_effect(&mut self, state_change: StateChange) {
         println!("Applying state change {:?}", state_change);
 
@@ -135,10 +140,11 @@ impl GameState {
         for (k, v) in state.iter() {
             *entity_state.entry(*k).or_insert(0) += v;
         }
-
     }
 }
 
+/// Progress the game forward one tick
+// TODO implement a state machine and transitions between stages
 fn tick(game: &mut GameState) -> &mut GameState {
     match game.action {
         Action::Draw => {
@@ -146,6 +152,8 @@ fn tick(game: &mut GameState) -> &mut GameState {
             if let Some(card) = game.draw.pop() {
                 game.hand.push(card);
             }
+            // TODO if there are no cards in the draw pile, move the
+            // discard pile to the draw pile and shuffle
         },
         Action::PlayCard(ent_idx, card_idx) => {
             let card_id = &game.hand[card_idx as usize];
@@ -201,11 +209,6 @@ fn draw_hand(game: &mut GameState, count: i8) -> &mut GameState {
     game
 }
 
-fn add_enemy(game: &mut GameState, enemy: Enemy) -> &mut GameState {
-    game.entities.push(Box::new(enemy));
-    game
-}
-
 #[derive(Debug)]
 struct CardCollection {
     inner: HashMap<CardId, Card>
@@ -233,7 +236,43 @@ mod test_game {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn apply_effects() {
+        // Initialize game state for the test
+        let cards = CardCollection::new();
+        let init_deck = vec![];
+        let mut game = GameState::new(cards, init_deck);
+
+        // Add a player entity
+        let player_id = 0i32;
+        let mut s = State::new();
+        s.insert(Attribute::Hull, 10);
+        s.insert(Attribute::Shields, 10);
+        let player = Player { state: s };
+        game.add_entity(Box::new(player));
+
+        // We'll test the shields card effects are applied correctly
+        let card = Card {
+            id: CardId::Shields,
+            name: "Shields",
+            effects: vec![Box::new(IncreaseShields {})]
+        };
+
+        // Apply state change for the card
+        let state_change = card.effects[0]
+            .calculate(&game, player_id);
+        game.apply_effect((player_id, state_change));
+
+        assert_eq!(
+            game.entities[player_id as usize]
+                .get_state()
+                .get(&Attribute::Shields)
+                .unwrap(),
+            &11i32
+        )
+    }
+
+    #[test]
+    fn integration() {
         let mut cards = CardCollection::new();
 
         cards.insert(
@@ -269,7 +308,7 @@ mod test_game {
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let enemy = Enemy { state: s };
-        add_enemy(&mut game, enemy);
+        game.add_entity(Box::new(enemy));
 
         // Draw a hand
         draw_hand(&mut game, 4);
