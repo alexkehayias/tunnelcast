@@ -18,8 +18,8 @@ enum CardId {
 enum Action {
     Draw,
     PlayCard(i32, i32),
+    BeginTurn,
     EndTurn,
-    EnemyTurn
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
@@ -140,11 +140,15 @@ impl GameState {
         for (k, v) in state.iter() {
             *entity_state.entry(*k).or_insert(0) += v;
         }
+
+        // TODO handle removing entities from the game if they were
+        // destroyed and return these events.
     }
 }
 
 /// Progress the game forward one tick
-// TODO implement a state machine and transitions between stages
+// TODO implement a state machine for taking turns and transition
+// between stages
 fn tick(game: &mut GameState) -> &mut GameState {
     match game.action {
         Action::Draw => {
@@ -185,8 +189,13 @@ fn tick(game: &mut GameState) -> &mut GameState {
             // borrow error because card_id still immutably borrows
             // GameState and apply_effect needs a mutable reference
             game.apply_effect((ent_idx, accum));
+        },
+        Action::BeginTurn => {
+            draw_hand(game, 4);
         }
-        _ => ()
+        Action::EndTurn => {
+            discard_hand(game);
+        }
     }
 
     game
@@ -206,6 +215,13 @@ fn draw_hand(game: &mut GameState, count: i8) -> &mut GameState {
         }
     }
 
+    game
+}
+
+/// Move all cards from hand to the discard pile
+fn discard_hand(game: &mut GameState) -> &mut GameState {
+    // TODO: handle cards that persist between turns
+    game.discard.append(&mut game.hand);
     game
 }
 
@@ -235,8 +251,53 @@ fn main() {
 mod test_game {
     use super::*;
 
+
     #[test]
-    fn apply_effects() {
+    fn test_draw_hand() {
+        // Initialize game state for the test
+        let cards = CardCollection::new();
+        let init_deck = vec![];
+        let mut game = GameState::new(cards, init_deck);
+
+        // Drawing a hand with an empty deck should not panic
+        draw_hand(&mut game, 4);
+        assert_eq!(game.hand, vec![], "Hand should be empty");
+
+        // Try with a draw pile of three cards and try to draw four
+        let expected_hand = vec![
+            CardId::Phasers,
+            CardId::Phasers,
+            CardId::Phasers
+        ];
+        game.draw = expected_hand.clone();
+        draw_hand(&mut game, 4);
+        assert_eq!(expected_hand, game.hand);
+        assert!(game.draw.is_empty(), "Draw pile should be empty");
+    }
+
+    #[test]
+    fn test_discard_hand() {
+        // Initialize game state for the test
+        let cards = CardCollection::new();
+        let init_deck = vec![];
+        let mut game = GameState::new(cards, init_deck);
+
+        // Try with a draw pile of three cards and try to draw four
+        game.hand = vec![
+            CardId::Phasers,
+            CardId::Phasers,
+        ];
+        discard_hand(&mut game);
+        assert!(game.hand.is_empty(), "Hand should be empty");
+        assert_eq!(
+            vec![CardId::Phasers,CardId::Phasers],
+            game.discard,
+            "Cards from the hand should all be in the discard pile"
+        )
+    }
+
+    #[test]
+    fn test_apply_effects() {
         // Initialize game state for the test
         let cards = CardCollection::new();
         let init_deck = vec![];
@@ -272,7 +333,7 @@ mod test_game {
     }
 
     #[test]
-    fn integration() {
+    fn test_integration() {
         let mut cards = CardCollection::new();
 
         cards.insert(
@@ -303,22 +364,24 @@ mod test_game {
 
         let mut game = GameState::new(cards, init_deck);
 
-        // Add an opponent
+        // Add an enemy
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let enemy = Enemy { state: s };
         game.add_entity(Box::new(enemy));
 
-        // Draw a hand
-        draw_hand(&mut game, 4);
-        println!("State: {:?}", tick(&mut game));
-
-        // Play a card
-        game.action = Action::PlayCard(0, 0);
+        // Run through a turn to make sure it works
+        game.action = Action::BeginTurn;
         println!("State: {:?}", tick(&mut game));
 
         game.action = Action::PlayCard(0, 0);
+        println!("State: {:?}", tick(&mut game));
+
+        game.action = Action::PlayCard(0, 0);
+        println!("State: {:?}", tick(&mut game));
+
+        game.action = Action::EndTurn;
         println!("State: {:?}", tick(&mut game));
     }
 }
