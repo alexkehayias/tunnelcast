@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::cmp::{Eq, PartialEq};
 use std::hash::Hash;
@@ -11,7 +9,6 @@ use rand::thread_rng;
 enum CardId {
     Shields,
     Phasers,
-    Overdrive,
 }
 
 #[derive(Debug)]
@@ -25,8 +22,6 @@ enum Action {
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 enum Attribute {
     Shields,
-    Weaponry,
-    Power,
     Hull,
 }
 
@@ -141,8 +136,8 @@ impl GameState {
     fn apply_effect(&mut self, state_change: StateChange) {
         println!("Applying state change {:?}", state_change);
 
-        let (ent_id, state) = state_change;
-        let entity_state = self.entity_state.get_mut(&ent_id)
+        let (entity_id, state) = state_change;
+        let entity_state = self.entity_state.get_mut(&entity_id)
             .expect("Failed ot get entity")
             .get_state();
 
@@ -150,24 +145,32 @@ impl GameState {
             *entity_state.entry(*k).or_insert(0) += v;
         }
 
-        // TODO handle removing entities from the game if they were
-        // destroyed and return these events.
+        // Removing entity from the game if hull drops to zero
+        if entity_state.get(&Attribute::Hull).unwrap() <= &0 {
+            self.remove_entity(&entity_id);
+        }
     }
 }
 
 /// Progress the game forward one tick
 // TODO implement a state machine for taking turns and transition
 // between stages
+// TODO maybe this should emit events that the UI layer
+// can interpret e.g. discard pile moved to draw pile
 fn tick(game: &mut GameState) -> &mut GameState {
     match game.action {
         Action::Draw => {
-            // TODO calculate how many to draw
+            // If draw pile is empty, shuffle and move discard pile
+            // into the draw pile.
+            if game.draw.iter().count() == 0 {
+                shuffle_deck(&mut game.discard);
+                game.draw.append(&mut game.discard);
+            }
+
             if let Some(card) = game.draw.pop() {
                 game.hand.push(card);
-            }
-            // TODO if there are no cards in the draw pile, move the
-            // discard pile to the draw pile and shuffle
-;        },
+            };
+        },
         Action::PlayCard(target_ent_idx, card_idx) => {
             let card_id = &game.hand[card_idx as usize];
             let card = &game.cards
@@ -201,7 +204,7 @@ fn tick(game: &mut GameState) -> &mut GameState {
         },
         Action::BeginTurn => {
             draw_hand(game, 4);
-        }
+        },
         Action::EndTurn => {
             discard_hand(game);
         }
@@ -229,7 +232,7 @@ fn draw_hand(game: &mut GameState, count: i8) -> &mut GameState {
 
 /// Move all cards from hand to the discard pile
 fn discard_hand(game: &mut GameState) -> &mut GameState {
-    // TODO: handle cards that persist between turns
+    // TODO handle cards that persist between turns
     game.discard.append(&mut game.hand);
     game
 }
