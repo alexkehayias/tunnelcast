@@ -17,7 +17,7 @@ enum CardId {
 #[derive(Debug)]
 enum Action {
     Draw,
-    PlayCard(i32, i32),
+    PlayCard(EntityId, i32),
     BeginTurn,
     EndTurn,
 }
@@ -30,8 +30,14 @@ enum Attribute {
     Hull,
 }
 
+type EntityId = u32;
+
 trait Entity: std::fmt::Debug {
     fn get_state(&mut self) -> &mut State;
+}
+
+fn gen_id() -> EntityId {
+    rand::random::<u32>()
 }
 
 // For now, combining entities with state for simplicity.
@@ -56,14 +62,14 @@ impl Entity for Enemy {
 }
 
 trait Effect: std::fmt::Debug {
-    fn calculate(&self, game: &GameState, ent_idx: i32) -> State;
+    fn calculate(&self, game: &GameState, ent_id: EntityId) -> State;
 }
 
 #[derive(Debug)]
 struct IncreaseShields;
 
 impl Effect for IncreaseShields {
-    fn calculate(&self, _game: &GameState, _ent_idx: i32) -> State {
+    fn calculate(&self, _game: &GameState, _ent_id: EntityId) -> State {
         let mut m = State::new();
         m.insert(Attribute::Shields, 1i32);
 
@@ -75,7 +81,7 @@ impl Effect for IncreaseShields {
 struct DamageHull;
 
 impl Effect for DamageHull {
-    fn calculate(&self, _game: &GameState, _ent_idx: i32) -> State {
+    fn calculate(&self, _game: &GameState, _ent_id: EntityId) -> State {
         let mut m = State::new();
         m.insert(Attribute::Hull, -1i32);
 
@@ -97,11 +103,12 @@ struct GameState {
     hand: Vec<CardId>,
     discard: Vec<CardId>,
     action: Action,
-    entities: Vec<Box<dyn Entity>>,
+    entities: Vec<EntityId>,
+    entity_state: HashMap<EntityId, Box<dyn Entity>>,
 }
 
 type State = HashMap<Attribute, i32>;
-type StateChange = (i32, HashMap<Attribute, i32>);
+type StateChange = (EntityId, HashMap<Attribute, i32>);
 
 impl GameState {
     fn new(cards: CardCollection, deck: Vec<CardId>) -> GameState {
@@ -112,19 +119,30 @@ impl GameState {
             discard: vec![],
             action: Action::Draw,
             entities: vec![],
+            entity_state: HashMap::new(),
         }
     }
 
-    fn add_entity(&mut self, entity: Box<dyn Entity>) -> &mut Self {
-        self.entities.push(entity);
-        self
+    fn add_entity(&mut self, entity: Box<dyn Entity>) -> EntityId {
+        let entity_id = gen_id();
+        self.entities.push(entity_id);
+        self.entity_state.insert(entity_id, entity);
+        entity_id
+    }
+
+    fn remove_entity(&mut self, entity_id: &EntityId) {
+        let index = self.entities.iter()
+            .position(|x| x == entity_id)
+            .expect("EntityId not found");
+        self.entities.remove(index);
+        self.entity_state.remove(entity_id);
     }
 
     fn apply_effect(&mut self, state_change: StateChange) {
         println!("Applying state change {:?}", state_change);
 
-        let (ent_idx, state) = state_change;
-        let entity_state = self.entities.get_mut(ent_idx as usize)
+        let (ent_id, state) = state_change;
+        let entity_state = self.entity_state.get_mut(&ent_id)
             .expect("Failed ot get entity")
             .get_state();
 
@@ -149,7 +167,7 @@ fn tick(game: &mut GameState) -> &mut GameState {
             }
             // TODO if there are no cards in the draw pile, move the
             // discard pile to the draw pile and shuffle
-        },
+;        },
         Action::PlayCard(target_ent_idx, card_idx) => {
             let card_id = &game.hand[card_idx as usize];
             let card = &game.cards
@@ -295,12 +313,11 @@ mod test_game {
         let mut game = GameState::new(cards, init_deck);
 
         // Add a player entity
-        let player_id = 0i32;
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let player = Player { state: s };
-        game.add_entity(Box::new(player));
+        let player_id = game.add_entity(Box::new(player));
 
         // We'll test the shields card effects are applied correctly
         let card = Card {
@@ -315,7 +332,8 @@ mod test_game {
         game.apply_effect((player_id, state_change));
 
         assert_eq!(
-            game.entities[player_id as usize]
+            game.entity_state.get_mut(&player_id)
+                .unwrap()
                 .get_state()
                 .get(&Attribute::Shields)
                 .unwrap(),
@@ -360,16 +378,16 @@ mod test_game {
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let enemy = Enemy { state: s };
-        game.add_entity(Box::new(enemy));
+        let enemy_id = game.add_entity(Box::new(enemy));
 
         // Run through a turn to make sure it works
         game.action = Action::BeginTurn;
         println!("State: {:?}", tick(&mut game));
 
-        game.action = Action::PlayCard(0, 0);
+        game.action = Action::PlayCard(enemy_id, 0);
         println!("State: {:?}", tick(&mut game));
 
-        game.action = Action::PlayCard(0, 0);
+        game.action = Action::PlayCard(enemy_id, 0);
         println!("State: {:?}", tick(&mut game));
 
         game.action = Action::EndTurn;
