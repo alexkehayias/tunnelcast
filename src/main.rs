@@ -96,12 +96,8 @@ struct GameState {
     draw: Vec<CardId>,
     hand: Vec<CardId>,
     discard: Vec<CardId>,
-    shields: u32,
-    power: u32,
-    weaponry: u32,
     action: Action,
     entities: Vec<Box<dyn Entity>>,
-    // buffs: Vec<Buff>
 }
 
 type State = HashMap<Attribute, i32>;
@@ -114,9 +110,6 @@ impl GameState {
             draw: deck,
             hand: vec![],
             discard: vec![],
-            shields: 0,
-            power: 0,
-            weaponry: 0,
             action: Action::Draw,
             entities: vec![],
         }
@@ -157,7 +150,7 @@ fn tick(game: &mut GameState) -> &mut GameState {
             // TODO if there are no cards in the draw pile, move the
             // discard pile to the draw pile and shuffle
         },
-        Action::PlayCard(ent_idx, card_idx) => {
+        Action::PlayCard(target_ent_idx, card_idx) => {
             let card_id = &game.hand[card_idx as usize];
             let card = &game.cards
                 .get(card_id)
@@ -166,7 +159,7 @@ fn tick(game: &mut GameState) -> &mut GameState {
             let mut accum = State::new();
             for fx in &card.effects {
                 println!("Effect: {:?}", fx);
-                let effect = fx.calculate(&game, ent_idx);
+                let effect = fx.calculate(&game, target_ent_idx);
 
                 // Merge the effect by summing it with any existing
                 // value in the accumumulator
@@ -186,7 +179,7 @@ fn tick(game: &mut GameState) -> &mut GameState {
             // This needs to happen after discard otherwise there is a
             // borrow error because card_id still immutably borrows
             // GameState and apply_effect needs a mutable reference
-            game.apply_effect((ent_idx, accum));
+            game.apply_effect((target_ent_idx, accum));
         },
         Action::BeginTurn => {
             draw_hand(game, 4);
