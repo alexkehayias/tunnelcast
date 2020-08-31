@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 rand = "0.7.3"
 lazy_static = "1.4.0"
+tui = "0.10.0"
+termion = "1.5.5"
