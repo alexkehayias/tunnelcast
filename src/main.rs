@@ -23,6 +23,7 @@ use engine::*;
 use event::{Config, Event, Events};
 
 struct Game {
+    game_state: GameState,
     x: f64,
     y: f64,
 }
@@ -66,12 +67,15 @@ impl Game {
         let enemy = Enemy { state: s };
         let enemy_id = game_state.add_entity(Box::new(enemy));
 
+        draw_hand(&mut game_state, 4);
+
         game_state
     }
 
     fn new() -> Self {
-
+        let game_state = Self::init_state();
         Self {
+            game_state,
             x: 0.0,
             y: 0.0,
         }
@@ -102,19 +106,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         terminal.draw(|f| {
+            let game_state = &game.game_state;
+
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(50),
                               Constraint::Percentage(50)].as_ref())
                 .split(f.size());
 
-            let items = [ListItem::new("Item 1"), ListItem::new("Item 2"), ListItem::new("Item 3")];
+            let items: Vec<ListItem> = game_state.hand.iter()
+                .map(|i| ListItem::new(game_state.cards.get(i).unwrap().name))
+                .collect();
 
-            f.render_widget(List::new(items)
+            let list = List::new(items)
                 .block(Block::default().title("List").borders(Borders::ALL))
                 .style(Style::default().fg(Color::White))
-                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
-                            .highlight_symbol(">>"), chunks[0]);
+                .highlight_style(
+                    Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_symbol(">>");
+
+            f.render_widget(list, chunks[0]);
 
             let canvas = Canvas::default()
                 .block(Block::default().borders(Borders::ALL).title("Tunnelcast"))

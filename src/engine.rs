@@ -93,13 +93,13 @@ pub struct Card {
 
 #[derive(Debug)]
 pub struct GameState {
-    cards: CardCollection,
-    draw: Vec<CardId>,
-    hand: Vec<CardId>,
-    discard: Vec<CardId>,
-    action: Action,
-    entities: Vec<EntityId>,
-    entity_state: HashMap<EntityId, Box<dyn Entity>>,
+    pub cards: CardCollection,
+    pub draw: Vec<CardId>,
+    pub hand: Vec<CardId>,
+    pub discard: Vec<CardId>,
+    pub action: Action,
+    pub entities: Vec<EntityId>,
+    pub entity_state: HashMap<EntityId, Box<dyn Entity>>,
 }
 
 pub type State = HashMap<Attribute, i32>;
