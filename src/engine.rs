@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::cmp::{Eq, PartialEq};
 use std::hash::Hash;
@@ -13,6 +15,7 @@ pub enum CardId {
 
 #[derive(Debug)]
 pub enum Action {
+    None,
     Draw,
     PlayCard(EntityId, i32),
     BeginTurn,
@@ -112,7 +115,7 @@ impl GameState {
             draw: deck,
             hand: vec![],
             discard: vec![],
-            action: Action::Draw,
+            action: Action::None,
             entities: vec![],
             entity_state: HashMap::new(),
         }
@@ -159,6 +162,7 @@ impl GameState {
 // can interpret e.g. discard pile moved to draw pile
 pub fn tick(game: &mut GameState) -> &mut GameState {
     match game.action {
+        Action::None => (),
         Action::Draw => {
             // If draw pile is empty, shuffle and move discard pile
             // into the draw pile.
@@ -259,7 +263,6 @@ impl CardCollection {
 
 mod test_game {
     use super::*;
-
 
     #[test]
     fn test_draw_hand() {

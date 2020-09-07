@@ -1,17 +1,20 @@
 use std::{error::Error, io, time::Duration};
+use std::panic::{self, PanicInfo};
+use backtrace::Backtrace;
+
 use termion::{
     event::Key,
     input::MouseTerminal,
     raw::IntoRawMode,
-    screen::AlternateScreen
+    screen::AlternateScreen,
 };
 use tui::{
     backend::TermionBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Alignment},
     style::{Modifier, Style, Color},
+    text::{Spans, Span},
     widgets::{
-        canvas::{Canvas, Map, MapResolution, Rectangle},
-        Block, Borders, List, ListItem
+        Block, Borders, List, ListItem, Paragraph, Wrap
     },
     Terminal,
 };
@@ -21,6 +24,22 @@ mod event;
 
 use engine::*;
 use event::{Config, Event, Events};
+
+
+const SPACE_SHIP: &str = "
+                           |-----------|
+           i               |===========|
+           |               |,---------.|                      __--~\\__--.
+    #---,'----`-_   `n     |`---------'|    `n    `n     ,--~~  __-/~~--'_____.
+       |~~~~~~~~~|---~---/=|___________|=\\---~-----~-----| .--~~  |  .__|     |
+     -[|.--_. ===|#####|-| |@@@@|+-+@@@| |]=###|/-++++-[| ||||___+_.  | `===='-.
+     -[|'==~'    |#####|-| |@@@@|+-+@@@| |]=###|\\-++++-[| ||||~~~+~'  | ,====.-'
+       |_________|---u---\\=|~~~~~~~~~~~|=/---u-----u-----| '--__  |  '~~|     |
+        \\       /=-   `    |,---------.|      `     `    `--__  ~~-\\__--.~~~~~'
+----=:===\\     /           |`---------'|                      ~~--_/~~--'
+      --<:\\___/--          |===========|
+                           |-----------|
+                           |___________|";
 
 struct Game {
     game_state: GameState,
@@ -60,12 +79,19 @@ impl Game {
 
         let mut game_state = GameState::new(cards, init_deck);
 
+        // Add player
+        let mut s = State::new();
+        s.insert(Attribute::Hull, 10);
+        s.insert(Attribute::Shields, 10);
+        let player = Player { state: s };
+        game_state.add_entity(Box::new(player));
+
         // Add an enemy
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let enemy = Enemy { state: s };
-        let enemy_id = game_state.add_entity(Box::new(enemy));
+        game_state.add_entity(Box::new(enemy));
 
         draw_hand(&mut game_state, 4);
 
@@ -82,11 +108,36 @@ impl Game {
     }
 
     fn update(&mut self) {
-        // TODO
+        tick(&mut self.game_state);
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+/// Shows a backtrace if the program panics
+fn panic_hook(info: &PanicInfo<'_>) {
+    if cfg!(debug_assertions) {
+        let location = info.location().unwrap();
+
+        let msg = match info.payload().downcast_ref::<&'static str>() {
+            Some(s) => *s,
+            None => match info.payload().downcast_ref::<String>() {
+                Some(s) => &s[..],
+                None => "Box<Any>",
+            },
+        };
+
+        let stacktrace: String = format!("{:?}", Backtrace::new()).replace('\n', "\n\r");
+
+        println!(
+            "{}thread '<unnamed>' panicked at '{}', {}\n\r{}",
+            termion::screen::ToMainScreen,
+            msg,
+            location,
+            stacktrace
+        );
+    }
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
     // Initialize the terminal
     let stdout = io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
@@ -110,43 +161,92 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(50),
-                              Constraint::Percentage(50)].as_ref())
+                .constraints([Constraint::Percentage(10),
+                              Constraint::Percentage(40),
+                              Constraint::Percentage(40),
+                              Constraint::Percentage(10)].as_ref())
                 .split(f.size());
+
+            let status_bar = Paragraph::new("Shields: 33  /  Hull: 33")
+                .block(Block::default().borders(Borders::ALL).title("Status"))
+                .alignment(Alignment::Center);
+            f.render_widget(status_bar, chunks[0]);
+
+            let mut text: Vec<Spans> = SPACE_SHIP.split('\n')
+                .map(|l| Spans::from(l))
+                .collect();
+            text.push(Spans::from(""));
+            text.push(Spans::from("Shields: 10  /  Hull: 10"));
+
+            let paragraph = Paragraph::new(text)
+                .block(Block::default().borders(Borders::ALL))
+                .style(Style::default().fg(Color::LightYellow))
+                .alignment(Alignment::Left);
+            f.render_widget(paragraph, chunks[1]);
+
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(25),
+                              Constraint::Percentage(50),
+                              Constraint::Percentage(25)].as_ref())
+                .split(chunks[2]);
+
+            let draw_pile = Block::default().title("List").borders(Borders::ALL).title("Draw");
+            f.render_widget(draw_pile, horizontal_chunks[0]);
 
             let items: Vec<ListItem> = game_state.hand.iter()
                 .map(|i| ListItem::new(game_state.cards.get(i).unwrap().name))
                 .collect();
 
             let list = List::new(items)
-                .block(Block::default().title("List").borders(Borders::ALL))
+                .block(Block::default().borders(Borders::ALL).title("Hand"))
                 .style(Style::default().fg(Color::White))
                 .highlight_style(
                     Style::default().add_modifier(Modifier::ITALIC))
                 .highlight_symbol(">>");
 
-            f.render_widget(list, chunks[0]);
+            f.render_widget(list, horizontal_chunks[1]);
 
-            let canvas = Canvas::default()
-                .block(Block::default().borders(Borders::ALL).title("Tunnelcast"))
-                .paint(|ctx| {
-                    ctx.print(game.x, -game.y, "Cards go here", Color::Green);
-                })
-                .x_bounds([-180.0, 180.0])
-                .y_bounds([-90.0, 90.0]);
-            f.render_widget(canvas, chunks[0]);
-            let canvas = Canvas::default()
+            let discard_items = vec![];
+
+            let discard_pile = List::new(discard_items)
+                .block(Block::default().borders(Borders::ALL).title("Discard"))
+                .style(Style::default().fg(Color::White))
+                .highlight_style(
+                    Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_symbol(">>");
+
+            f.render_widget(discard_pile, horizontal_chunks[2]);
+
+            // Accumulate the list of cards in the hand with a number
+            // to press to play it
+            let mut cards_to_play = String::new();
+            for (idx, i) in game_state.hand.iter().enumerate() {
+                let name = game_state.cards.get(i).unwrap().name;
+                cards_to_play.push_str(&format!("[{}]{} ", idx, name));
+            }
+
+            let prompt = Paragraph::new(
+                vec![
+                    Spans::from("Select a card to play"),
+                    Spans::from(Span::styled(cards_to_play, Style::default().fg(Color::LightGreen)))
+                ])
                 .block(Block::default().borders(Borders::ALL))
-                .paint(|ctx| {
-                    ctx.print(game.x, -game.y, "You are here", Color::Yellow);
-                })
-                .x_bounds([10.0, 110.0])
-                .y_bounds([10.0, 110.0]);
-            f.render_widget(canvas, chunks[1]);
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: false });
+
+            f.render_widget(prompt, chunks[3]);
         })?;
 
         match events.next()? {
             Event::Input(input) => match input {
+                Key::Char('1') => {
+                    let card_id = game.game_state.hand[1];
+                    let _selected_card = game.game_state.cards.get(&card_id).unwrap();
+                    // TODO Prompt for who the target is
+                    let target_entity = game.game_state.entities[1];
+                    game.game_state.action = Action::PlayCard(target_entity, 1);
+                }
                 Key::Char('q') => {
                     break;
                 }
@@ -172,4 +272,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    panic::set_hook(Box::new(|info| {
+        panic_hook(info);
+    }));
+
+    run()
 }
