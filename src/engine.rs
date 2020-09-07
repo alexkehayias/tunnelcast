@@ -15,7 +15,7 @@ pub enum CardId {
 
 #[derive(Debug)]
 pub enum Action {
-    None,
+    Await,
     Draw,
     PlayCard(EntityId, i32),
     BeginTurn,
@@ -31,7 +31,8 @@ pub enum Attribute {
 pub type EntityId = u32;
 
 pub trait Entity: std::fmt::Debug {
-    fn get_state(&mut self) -> &mut State;
+    fn get_state(&self) -> &State;
+    fn get_state_mut(&mut self) -> &mut State;
 }
 
 fn gen_id() -> EntityId {
@@ -44,7 +45,11 @@ pub struct Player {
     pub state: State
 }
 impl Entity for Player {
-    fn get_state(&mut self) -> &mut State {
+    fn get_state(&self) -> &State {
+        &self.state
+    }
+
+    fn get_state_mut(&mut self) -> &mut State {
         &mut self.state
     }
 }
@@ -54,7 +59,11 @@ pub struct Enemy {
     pub state: State,
 }
 impl Entity for Enemy {
-    fn get_state(&mut self) -> &mut State {
+    fn get_state(&self) -> &State {
+        &self.state
+    }
+
+    fn get_state_mut(&mut self) -> &mut State {
         &mut self.state
     }
 }
@@ -103,6 +112,8 @@ pub struct GameState {
     pub action: Action,
     pub entities: Vec<EntityId>,
     pub entity_state: HashMap<EntityId, Box<dyn Entity>>,
+    pub player: EntityId,
+    pub enemy: Option<EntityId>,
 }
 
 pub type State = HashMap<Attribute, i32>;
@@ -115,14 +126,16 @@ impl GameState {
             draw: deck,
             hand: vec![],
             discard: vec![],
-            action: Action::None,
+            action: Action::Await,
             entities: vec![],
             entity_state: HashMap::new(),
+            player: gen_id(),
+            enemy: None,
         }
     }
 
-    pub fn add_entity(&mut self, entity: Box<dyn Entity>) -> EntityId {
-        let entity_id = gen_id();
+    pub fn add_entity(&mut self, entity_id: Option<EntityId>, entity: Box<dyn Entity>) -> EntityId {
+        let entity_id = entity_id.or_else(|| Some(gen_id())).unwrap();
         self.entities.push(entity_id);
         self.entity_state.insert(entity_id, entity);
         entity_id
@@ -137,12 +150,10 @@ impl GameState {
     }
 
     fn apply_effect(&mut self, state_change: StateChange) {
-        println!("Applying state change {:?}", state_change);
-
         let (entity_id, state) = state_change;
         let entity_state = self.entity_state.get_mut(&entity_id)
             .expect("Failed ot get entity")
-            .get_state();
+            .get_state_mut();
 
         for (k, v) in state.iter() {
             *entity_state.entry(*k).or_insert(0) += v;
@@ -162,7 +173,7 @@ impl GameState {
 // can interpret e.g. discard pile moved to draw pile
 pub fn tick(game: &mut GameState) -> &mut GameState {
     match game.action {
-        Action::None => (),
+        Action::Await => (),
         Action::Draw => {
             // If draw pile is empty, shuffle and move discard pile
             // into the draw pile.
@@ -183,7 +194,6 @@ pub fn tick(game: &mut GameState) -> &mut GameState {
 
             let mut accum = State::new();
             for fx in &card.effects {
-                println!("Effect: {:?}", fx);
                 let effect = fx.calculate(&game, target_ent_idx);
 
                 // Merge the effect by summing it with any existing
@@ -320,7 +330,7 @@ mod test_game {
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let player = Player { state: s };
-        let player_id = game.add_entity(Box::new(player));
+        let player_id = game.add_entity(None, Box::new(player));
 
         // We'll test the shields card effects are applied correctly
         let card = Card {
@@ -381,19 +391,19 @@ mod test_game {
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let enemy = Enemy { state: s };
-        let enemy_id = game.add_entity(Box::new(enemy));
+        let enemy_id = game.add_entity(None, Box::new(enemy));
 
         // Run through a turn to make sure it works
         game.action = Action::BeginTurn;
-        println!("State: {:?}", tick(&mut game));
+        tick(&mut game);
 
         game.action = Action::PlayCard(enemy_id, 0);
-        println!("State: {:?}", tick(&mut game));
+        tick(&mut game);
 
         game.action = Action::PlayCard(enemy_id, 0);
-        println!("State: {:?}", tick(&mut game));
+        tick(&mut game);
 
         game.action = Action::EndTurn;
-        println!("State: {:?}", tick(&mut game));
+        tick(&mut game);
     }
 }

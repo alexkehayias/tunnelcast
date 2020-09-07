@@ -84,14 +84,18 @@ impl Game {
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let player = Player { state: s };
-        game_state.add_entity(Box::new(player));
+        let player_id = 1;
+        game_state.add_entity(Some(player_id), Box::new(player));
+        game_state.player = player_id;
 
         // Add an enemy
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
         let enemy = Enemy { state: s };
-        game_state.add_entity(Box::new(enemy));
+        let enemy_id = 2;
+        game_state.add_entity(Some(enemy_id), Box::new(enemy));
+        game_state.enemy = Some(enemy_id);
 
         draw_hand(&mut game_state, 4);
 
@@ -108,7 +112,10 @@ impl Game {
     }
 
     fn update(&mut self) {
+        // Move the game forward one tick
         tick(&mut self.game_state);
+        // Await user input
+        self.game_state.action = Action::Await;
     }
 }
 
@@ -167,10 +174,27 @@ fn run() -> Result<(), Box<dyn Error>> {
                               Constraint::Percentage(10)].as_ref())
                 .split(f.size());
 
-            let status_bar = Paragraph::new("Shields: 33  /  Hull: 33")
+            // Display the player's status
+
+            let player_state = game_state.entity_state.get(&game_state.player)
+                .expect("Failed to get player's state")
+                .get_state();
+
+            // Use deref coercion to convert to &str. Using just &
+            // operator, the compiler will automatically insert an
+            // appropriate amount of derefs (*) based on the context
+            let player_status: &str = &format!(
+                "Shields: {}  /  Hull: {}",
+                player_state.get(&Attribute::Shields).unwrap(),
+                player_state.get(&Attribute::Hull).unwrap(),
+            );
+
+            let status_bar = Paragraph::new(player_status)
                 .block(Block::default().borders(Borders::ALL).title("Status"))
                 .alignment(Alignment::Center);
             f.render_widget(status_bar, chunks[0]);
+
+            // Display the enemy
 
             let mut text: Vec<Spans> = SPACE_SHIP.split('\n')
                 .map(|l| Spans::from(l))
@@ -183,6 +207,8 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .style(Style::default().fg(Color::LightYellow))
                 .alignment(Alignment::Left);
             f.render_widget(paragraph, chunks[1]);
+
+            // Show the deck piles (draw pile, hand, discard pile)
 
             let horizontal_chunks = Layout::default()
                 .direction(Direction::Horizontal)
@@ -218,6 +244,8 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             f.render_widget(discard_pile, horizontal_chunks[2]);
 
+            // Show the player input prompt
+
             // Accumulate the list of cards in the hand with a number
             // to press to play it
             let mut cards_to_play = String::new();
@@ -240,15 +268,16 @@ fn run() -> Result<(), Box<dyn Error>> {
 
         match events.next()? {
             Event::Input(input) => match input {
+                Key::Char('q') => {
+                    break;
+                }
                 Key::Char('1') => {
                     let card_id = game.game_state.hand[1];
                     let _selected_card = game.game_state.cards.get(&card_id).unwrap();
-                    // TODO Prompt for who the target is
-                    let target_entity = game.game_state.entities[1];
+                    // TODO Prompt for who the target is or
+                    // automatically determine if it's a self card
+                    let target_entity = game.game_state.player;
                     game.game_state.action = Action::PlayCard(target_entity, 1);
-                }
-                Key::Char('q') => {
-                    break;
                 }
                 Key::Down => {
                     game.y += 1.0;
