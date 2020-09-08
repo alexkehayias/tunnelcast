@@ -159,7 +159,7 @@ impl GameState {
     fn apply_effect(&mut self, state_change: StateChange) {
         let (entity_id, state) = state_change;
         let entity_state = self.entity_state.get_mut(&entity_id)
-            .expect("Failed ot get entity")
+            .expect("Failed to get entity")
             .get_state_mut();
 
         for (k, v) in state.iter() {
@@ -193,7 +193,7 @@ pub fn tick(game: &mut GameState) -> &mut GameState {
                 game.hand.push(card);
             };
         },
-        Action::PlayCard(target_ent_idx, card_idx) => {
+        Action::PlayCard(target_ent_id, card_idx) => {
             let card_id = &game.hand[card_idx as usize];
             let card = &game.cards
                 .get(card_id)
@@ -201,7 +201,7 @@ pub fn tick(game: &mut GameState) -> &mut GameState {
 
             let mut accum = State::new();
             for fx in &card.effects {
-                let effect = fx.calculate(&game, target_ent_idx);
+                let effect = fx.calculate(&game, target_ent_id);
 
                 // Merge the effect by summing it with any existing
                 // value in the accumumulator
@@ -221,7 +221,7 @@ pub fn tick(game: &mut GameState) -> &mut GameState {
             // This needs to happen after discard otherwise there is a
             // borrow error because card_id still immutably borrows
             // GameState and apply_effect needs a mutable reference
-            game.apply_effect((target_ent_idx, accum));
+            game.apply_effect((target_ent_id, accum));
         },
         Action::BeginTurn => {
             draw_hand(game, 4);

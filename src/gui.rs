@@ -1,13 +1,22 @@
 //! Implements a finite state machine to represent different GUI
-//! states.
+//! states. Does not ensure that transitions happen only once because
+//! the implementation for From does not consume the value.
+//!
+//! See [this blog post](https://hoverbear.org/blog/rust-state-machine-pattern/)
+//! for more about this design
 use crate::engine::{Target, EntityId};
 
 /// A collection of shared state between different transitions. Useful
 /// so you don't need to duplicate the same attributes across multiple
 /// states.
 pub struct SharedState {
-    enemy_id: EntityId,
-    target_id: Option<EntityId>,
+    /// Card played by index in the hand
+    pub card_idx: Option<i32>,
+    // TODO replace with a vector of enemies
+    /// The enemy ID in the current combat stage
+    pub enemy_id: EntityId,
+    /// The selected target for the played card
+    pub target_id: Option<EntityId>,
 }
 
 pub struct GuiStateMachine<T> {
@@ -15,10 +24,11 @@ pub struct GuiStateMachine<T> {
 }
 
 impl GuiStateMachine<Combat> {
-    pub fn new(enemy_id: EntityId) -> Self {
+    pub fn new(card_idx: Option<i32>, enemy_id: EntityId) -> Self {
         GuiStateMachine {
             state: Combat {
                 shared_state: SharedState {
+                    card_idx,
                     enemy_id,
                     target_id: None
                 }
@@ -28,30 +38,18 @@ impl GuiStateMachine<Combat> {
 }
 
 pub struct Combat {
-    shared_state: SharedState,
+    pub shared_state: SharedState,
 }
 
 pub struct Targeting {
-    shared_state: SharedState,
-    target_type: Target,
-    targets: Vec<EntityId>,
-}
-
-impl From<GuiStateMachine<Combat>> for GuiStateMachine<Targeting> {
-    fn from(val: GuiStateMachine<Combat>) -> GuiStateMachine<Targeting> {
-        let targets = vec![val.state.shared_state.enemy_id];
-        GuiStateMachine {
-            state: Targeting {
-                shared_state: val.state.shared_state,
-                target_type: Target::Single,
-                targets: targets,
-            }
-        }
-    }
+    pub shared_state: SharedState,
+    pub target_type: Target,
+    pub targets: Vec<EntityId>,
 }
 
 impl From<&GuiStateMachine<Combat>> for GuiStateMachine<Targeting> {
     fn from(val: &GuiStateMachine<Combat>) -> GuiStateMachine<Targeting> {
+        let card_idx = val.state.shared_state.card_idx;
         let enemy_id = val.state.shared_state.enemy_id;
         let target_id = val.state.shared_state.target_id;
         let targets = vec![enemy_id];
@@ -62,6 +60,7 @@ impl From<&GuiStateMachine<Combat>> for GuiStateMachine<Targeting> {
                 // avoid a borrowck error because we're using
                 // state.shared_state to create the vector of targets
                 shared_state: SharedState {
+                    card_idx,
                     enemy_id,
                     target_id
                 },
@@ -72,17 +71,47 @@ impl From<&GuiStateMachine<Combat>> for GuiStateMachine<Targeting> {
     }
 }
 
-impl From<GuiStateMachine<Targeting>> for GuiStateMachine<Combat> {
-    fn from(val: GuiStateMachine<Targeting>) -> GuiStateMachine<Combat> {
-
+impl From<&GuiStateMachine<Targeting>> for GuiStateMachine<Combat> {
+    fn from(val: &GuiStateMachine<Targeting>) -> GuiStateMachine<Combat> {
         // TODO Is there a way to make this not a runtime exception?
         // Assert that we have a target ID otherwise this is an
         // invalid transition.
         val.state.shared_state.target_id.expect("A target entity ID should have been selected at this point");
 
+        let card_idx = val.state.shared_state.card_idx;
+        let enemy_id = val.state.shared_state.enemy_id;
+        let target_id = val.state.shared_state.target_id;
+
         GuiStateMachine {
             state: Combat {
-                shared_state: val.state.shared_state
+                shared_state: SharedState {
+                    card_idx,
+                    enemy_id,
+                    target_id,
+                }
+            }
+        }
+    }
+}
+
+impl From<&mut GuiStateMachine<Targeting>> for GuiStateMachine<Combat> {
+    fn from(val: &mut GuiStateMachine<Targeting>) -> GuiStateMachine<Combat> {
+        // TODO Is there a way to make this not a runtime exception?
+        // Assert that we have a target ID otherwise this is an
+        // invalid transition.
+        val.state.shared_state.target_id.expect("A target entity ID should have been selected at this point");
+
+        let card_idx = val.state.shared_state.card_idx;
+        let enemy_id = val.state.shared_state.enemy_id;
+        let target_id = val.state.shared_state.target_id;
+
+        GuiStateMachine {
+            state: Combat {
+                shared_state: SharedState {
+                    card_idx,
+                    enemy_id,
+                    target_id,
+                }
             }
         }
     }
@@ -93,13 +122,14 @@ mod test_gui_state_machine {
 
     #[test]
     fn test_integration() {
+        let card_idx = 0;
         let enemy_id = 1;
-        let combat_state = GuiStateMachine::<Combat>::new(1);
+        let combat_state = GuiStateMachine::<Combat>::new(Some(card_idx), enemy_id);
 
         // Simulate the user selecting a target
-        let mut targeting_state = GuiStateMachine::<Targeting>::from(combat_state);
+        let mut targeting_state = GuiStateMachine::<Targeting>::from(&combat_state);
         targeting_state.state.shared_state.target_id = Some(enemy_id);
-        let combat_state_with_target = GuiStateMachine::<Combat>::from(targeting_state);
+        let combat_state_with_target = GuiStateMachine::<Combat>::from(&targeting_state);
 
         assert_eq!(
             combat_state_with_target.state.shared_state.target_id.unwrap(),

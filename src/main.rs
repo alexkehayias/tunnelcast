@@ -112,7 +112,10 @@ impl Game {
 
     fn new() -> Self {
         let game_state = Self::init_state();
-        let gui_state = GuiState::Combat(GuiStateMachine::<Combat>::new(game_state.enemy.unwrap()));
+        let gui_state = GuiState::Combat(GuiStateMachine::<Combat>::new(
+            None,
+            game_state.enemy.unwrap(),
+        ));
 
         Self {
             game_state,
@@ -270,7 +273,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let mut cards_to_play = String::new();
             for (idx, i) in game_state.hand.iter().enumerate() {
                 let name = game_state.cards.get(i).unwrap().name;
-                cards_to_play.push_str(&format!("[{}]{} ", idx, name));
+                cards_to_play.push_str(&format!("[{}]{} ", idx + 1, name));
             }
 
             let prompt = Paragraph::new(
@@ -285,29 +288,31 @@ fn run() -> Result<(), Box<dyn Error>> {
             f.render_widget(prompt, chunks[3]);
         })?;
 
-        // TODO Input events are handled differently depending on the
-        // UI state machine
-        match &game.gui_state {
-            GuiState::Combat(state) => {
+        // Input events are handled differently depending on the UI
+        // state machine
+        match game.gui_state {
+            GuiState::Combat(ref fsm) => {
                 match events.next()? {
                     Event::Input(input) => match input {
                         Key::Char('q') => {
                             break;
                         }
                         Key::Char('1') => {
-                            let card_id = game.game_state.hand[1];
+                            let card_idx = 0;
+                            let card_id = game.game_state.hand[card_idx];
                             let selected_card = game.game_state.cards.get(&card_id).unwrap();
 
                             // Determine the target of the card or
                             // prompt the user
                             match selected_card.target {
                                 Target::Player => {
-                                    game.game_state.action = Action::PlayCard(game.game_state.player, 1);
+                                    game.game_state.action = Action::PlayCard(game.game_state.player, card_idx as i32);
                                 }
                                 Target::Single => {
                                     // TODO If there is only a single
                                     // enemy then skip the transition
-                                    let next_gui_state = GuiStateMachine::<Targeting>::from(state);
+                                    let mut next_gui_state = GuiStateMachine::<Targeting>::from(fsm);
+                                    next_gui_state.state.shared_state.card_idx = Some(card_idx as i32);
                                     game.gui_state = GuiState::Targeting(next_gui_state);
                                 }
                             }
@@ -319,7 +324,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                     }
                 }
             },
-            GuiState::Targeting(_) => {
+            GuiState::Targeting(ref mut fsm) => {
                 match events.next()? {
                     Event::Input(input) => match input {
                         Key::Char('q') => {
@@ -327,10 +332,17 @@ fn run() -> Result<(), Box<dyn Error>> {
                             // GUI state
                             break;
                         }
-                        Key::Char('0') => {
-                            // Transition to the PlayCard state now
-                            // that we can guarantee a target
-                            // game.gui_state = Action::PlayCard(game.gui_state)
+                        Key::Char('1') => {
+                            // Transition back to Combat state and
+                            // play the card now that the player
+                            // selected a target
+                            let entity_idx = 1;
+                            let target_id = game.game_state.entities[entity_idx];
+                            fsm.state.shared_state.target_id = Some(target_id);
+                            let card_idx = fsm.state.shared_state.card_idx.unwrap();
+                            let next_gui_state = GuiStateMachine::<Combat>::from(fsm);
+                            game.gui_state = GuiState::Combat(next_gui_state);
+                            game.game_state.action = Action::PlayCard(target_id, card_idx);
                         }
                         _ => {}
                     },
