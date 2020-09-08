@@ -286,34 +286,44 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .wrap(Wrap { trim: false });
 
             f.render_widget(prompt, chunks[3]);
+
+            if let GuiState::Targeting(_state) = &game.gui_state {
+                // TODO if in a targeting state, show modal
+            }
         })?;
 
         // Input events are handled differently depending on the UI
         // state machine
         match game.gui_state {
-            GuiState::Combat(ref fsm) => {
+            GuiState::Combat(ref state) => {
                 match events.next()? {
                     Event::Input(input) => match input {
                         Key::Char('q') => {
                             break;
                         }
-                        Key::Char('1') => {
-                            let card_idx = 0;
-                            let card_id = game.game_state.hand[card_idx];
-                            let selected_card = game.game_state.cards.get(&card_id).unwrap();
+                        Key::Char('e') => {
+                            game.game_state.action = Action::EndTurn;
+                        }
+                        Key::Char(num_char) => {
+                            if ['1', '2', '3', '4', '5', '6', '7', '8', '9'].contains(&num_char) && num_char.to_digit(10).unwrap() <= game.game_state.hand.len() as u32 {
+                                let card_idx = num_char.to_digit(10).unwrap() as usize;
+                                let card_idx = card_idx - 1; // Convert to vector index
+                                let card_id = game.game_state.hand[card_idx];
+                                let selected_card = game.game_state.cards.get(&card_id).unwrap();
 
-                            // Determine the target of the card or
-                            // prompt the user
-                            match selected_card.target {
-                                Target::Player => {
-                                    game.game_state.action = Action::PlayCard(game.game_state.player, card_idx as i32);
-                                }
-                                Target::Single => {
-                                    // TODO If there is only a single
-                                    // enemy then skip the transition
-                                    let mut next_gui_state = GuiStateMachine::<Targeting>::from(fsm);
-                                    next_gui_state.state.shared_state.card_idx = Some(card_idx as i32);
-                                    game.gui_state = GuiState::Targeting(next_gui_state);
+                                // Determine the target of the card or
+                                // prompt the user
+                                match selected_card.target {
+                                    Target::Player => {
+                                        game.game_state.action = Action::PlayCard(game.game_state.player, card_idx as i32);
+                                    }
+                                    Target::Single => {
+                                        // TODO If there is only a single
+                                        // enemy then skip the transition
+                                        let mut next_gui_state = GuiStateMachine::<Targeting>::from(state);
+                                        next_gui_state.state.shared_state.card_idx = Some(card_idx as i32);
+                                        game.gui_state = GuiState::Targeting(next_gui_state);
+                                    }
                                 }
                             }
                         }
