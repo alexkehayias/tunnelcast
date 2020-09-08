@@ -21,9 +21,11 @@ use tui::{
 
 mod engine;
 mod event;
+mod gui;
 
 use engine::*;
 use event::{Config, Event, Events};
+use gui::*;
 
 
 const SPACE_SHIP: &str = "
@@ -41,10 +43,14 @@ const SPACE_SHIP: &str = "
                            |-----------|
                            |___________|";
 
+enum GuiState {
+    Combat(GuiStateMachine<Combat>),
+    Targeting(GuiStateMachine<Targeting>),
+}
+
 struct Game {
     game_state: GameState,
-    x: f64,
-    y: f64,
+    gui_state: GuiState,
 }
 
 impl Game {
@@ -55,7 +61,8 @@ impl Game {
             Card {
                 id: CardId::Shields,
                 name: "Shields",
-                effects: vec![Box::new(IncreaseShields {})]
+                effects: vec![Box::new(IncreaseShields {})],
+                target: Target::Player
             }
         );
 
@@ -63,7 +70,8 @@ impl Game {
             Card {
                 id: CardId::Phasers,
                 name: "Phasers",
-                effects: vec![Box::new(DamageHull {})]
+                effects: vec![Box::new(DamageHull {})],
+                target: Target::Single
             }
         );
 
@@ -104,10 +112,11 @@ impl Game {
 
     fn new() -> Self {
         let game_state = Self::init_state();
+        let gui_state = GuiState::Combat(GuiStateMachine::<Combat>::new(game_state.enemy.unwrap()));
+
         Self {
             game_state,
-            x: 0.0,
-            y: 0.0,
+            gui_state
         }
     }
 
@@ -196,11 +205,21 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             // Display the enemy
 
+            let enemy_state = game_state.entity_state.get(&game_state.enemy.unwrap())
+                .expect("Failed to get enemy's state")
+                .get_state();
+
+            let enemy_status: &str = &format!(
+                "Shields: {}  /  Hull: {}",
+                enemy_state.get(&Attribute::Shields).unwrap(),
+                enemy_state.get(&Attribute::Hull).unwrap(),
+            );
+
             let mut text: Vec<Spans> = SPACE_SHIP.split('\n')
                 .map(|l| Spans::from(l))
                 .collect();
             text.push(Spans::from(""));
-            text.push(Spans::from("Shields: 10  /  Hull: 10"));
+            text.push(Spans::from(enemy_status));
 
             let paragraph = Paragraph::new(text)
                 .block(Block::default().borders(Borders::ALL))
@@ -266,38 +285,63 @@ fn run() -> Result<(), Box<dyn Error>> {
             f.render_widget(prompt, chunks[3]);
         })?;
 
-        match events.next()? {
-            Event::Input(input) => match input {
-                Key::Char('q') => {
-                    break;
-                }
-                Key::Char('1') => {
-                    let card_id = game.game_state.hand[1];
-                    let _selected_card = game.game_state.cards.get(&card_id).unwrap();
-                    // TODO Prompt for who the target is or
-                    // automatically determine if it's a self card
-                    let target_entity = game.game_state.player;
-                    game.game_state.action = Action::PlayCard(target_entity, 1);
-                }
-                Key::Down => {
-                    game.y += 1.0;
-                }
-                Key::Up => {
-                    game.y -= 1.0;
-                }
-                Key::Right => {
-                    game.x += 1.0;
-                }
-                Key::Left => {
-                    game.x -= 1.0;
-                }
+        // TODO Input events are handled differently depending on the
+        // UI state machine
+        match &game.gui_state {
+            GuiState::Combat(state) => {
+                match events.next()? {
+                    Event::Input(input) => match input {
+                        Key::Char('q') => {
+                            break;
+                        }
+                        Key::Char('1') => {
+                            let card_id = game.game_state.hand[1];
+                            let selected_card = game.game_state.cards.get(&card_id).unwrap();
 
-                _ => {}
+                            // Determine the target of the card or
+                            // prompt the user
+                            match selected_card.target {
+                                Target::Player => {
+                                    game.game_state.action = Action::PlayCard(game.game_state.player, 1);
+                                }
+                                Target::Single => {
+                                    // TODO If there is only a single
+                                    // enemy then skip the transition
+                                    let next_gui_state = GuiStateMachine::<Targeting>::from(state);
+                                    game.gui_state = GuiState::Targeting(next_gui_state);
+                                }
+                            }
+                        }
+                        _ => {}
+                    },
+                    Event::Tick => {
+                        game.update();
+                    }
+                }
             },
-            Event::Tick => {
-                game.update();
-            }
+            GuiState::Targeting(_) => {
+                match events.next()? {
+                    Event::Input(input) => match input {
+                        Key::Char('q') => {
+                            // TODO cancel by moving back to previous
+                            // GUI state
+                            break;
+                        }
+                        Key::Char('0') => {
+                            // Transition to the PlayCard state now
+                            // that we can guarantee a target
+                            // game.gui_state = Action::PlayCard(game.gui_state)
+                        }
+                        _ => {}
+                    },
+                    Event::Tick => {
+                        game.update();
+                    }
+                }
+            },
         }
+
+
     }
 
     Ok(())

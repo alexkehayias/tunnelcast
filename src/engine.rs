@@ -97,10 +97,17 @@ impl Effect for DamageHull {
 }
 
 #[derive(Debug)]
+pub enum Target {
+    Player,
+    Single,
+}
+
+#[derive(Debug)]
 pub struct Card {
     pub id: CardId,
     pub name: &'static str,
-    pub effects: Vec<Box<dyn Effect>>
+    pub effects: Vec<Box<dyn Effect>>,
+    pub target: Target
 }
 
 #[derive(Debug)]
@@ -270,7 +277,7 @@ impl CardCollection {
     }
 }
 
-
+#[allow(unused_imports)]
 mod test_game {
     use super::*;
 
@@ -336,7 +343,8 @@ mod test_game {
         let card = Card {
             id: CardId::Shields,
             name: "Shields",
-            effects: vec![Box::new(IncreaseShields {})]
+            effects: vec![Box::new(IncreaseShields {})],
+            target: Target::Player
         };
 
         // Apply state change for the card
@@ -362,7 +370,8 @@ mod test_game {
             Card {
                 id: CardId::Shields,
                 name: "Shields",
-                effects: vec![Box::new(IncreaseShields {})]
+                effects: vec![Box::new(IncreaseShields {})],
+                target: Target::Player
             }
         );
 
@@ -370,7 +379,8 @@ mod test_game {
             Card {
                 id: CardId::Phasers,
                 name: "Phasers",
-                effects: vec![Box::new(DamageHull {})]
+                effects: vec![Box::new(DamageHull {})],
+                target: Target::Single,
             }
         );
 
