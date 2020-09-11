@@ -45,7 +45,7 @@ const SPACE_SHIP: &str = "
 
 enum GuiState {
     Combat(GuiStateMachine<Combat>),
-    Targeting(GuiStateMachine<Targeting>),
+    TargetSelect(GuiStateMachine<TargetSelect>),
 }
 
 struct Game {
@@ -287,7 +287,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             f.render_widget(prompt, chunks[3]);
 
-            if let GuiState::Targeting(_state) = &game.gui_state {
+            if let GuiState::TargetSelect(_state) = &game.gui_state {
                 // TODO if in a targeting state, show modal
             }
         })?;
@@ -320,9 +320,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                                     Target::Single => {
                                         // TODO If there is only a single
                                         // enemy then skip the transition
-                                        let mut next_gui_state = GuiStateMachine::<Targeting>::from(state);
+                                        let mut next_gui_state = GuiStateMachine::<TargetSelect>::from(state);
                                         next_gui_state.state.shared_state.card_idx = Some(card_idx as i32);
-                                        game.gui_state = GuiState::Targeting(next_gui_state);
+                                        game.gui_state = GuiState::TargetSelect(next_gui_state);
                                     }
                                 }
                             }
@@ -334,13 +334,13 @@ fn run() -> Result<(), Box<dyn Error>> {
                     }
                 }
             },
-            GuiState::Targeting(ref mut fsm) => {
+            GuiState::TargetSelect(ref mut state) => {
                 match events.next()? {
                     Event::Input(input) => match input {
                         Key::Char('q') => {
                             // TODO cancel by moving back to previous
                             // GUI state
-                            break;
+                            // break;
                         }
                         Key::Char('1') => {
                             // Transition back to Combat state and
@@ -348,9 +348,15 @@ fn run() -> Result<(), Box<dyn Error>> {
                             // selected a target
                             let entity_idx = 1;
                             let target_id = game.game_state.entities[entity_idx];
-                            fsm.state.shared_state.target_id = Some(target_id);
-                            let card_idx = fsm.state.shared_state.card_idx.unwrap();
-                            let next_gui_state = GuiStateMachine::<Combat>::from(fsm);
+
+                            // TODO this feels wrong, probably an
+                            // indication there should actually be
+                            // another state to transition to and
+                            // target_id should not be in shared state
+                            // state.state.shared_state.target_id = Some(target_id);
+                            let card_idx = state.state.shared_state.card_idx.unwrap();
+
+                            let next_gui_state = GuiStateMachine::<Combat>::from(state);
                             game.gui_state = GuiState::Combat(next_gui_state);
                             game.game_state.action = Action::PlayCard(target_id, card_idx);
                         }
