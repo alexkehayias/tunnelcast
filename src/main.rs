@@ -5,10 +5,10 @@ use std::{error::Error, io, time::Duration};
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap, Clear},
     Terminal,
 };
 
@@ -290,8 +290,57 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             f.render_widget(prompt, chunks[3]);
 
-            if let GuiState::TargetSelect(_state) = &game.gui_state {
-                // TODO if in a targeting state, show modal
+            if let GuiState::TargetSelect(state) = &game.gui_state {
+                // Create a centered modal
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints(
+                        [
+                            Constraint::Percentage(33),
+                            Constraint::Percentage(33),
+                            Constraint::Percentage(33),
+                        ]
+                            .as_ref(),
+                    )
+                    .split(f.size());
+
+                let horizontal_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints(
+                        [
+                            Constraint::Percentage(20),
+                            Constraint::Percentage(60),
+                            Constraint::Percentage(20),
+                        ]
+                            .as_ref(),
+                    )
+                    .split(chunks[1]);
+                let modal = horizontal_chunks[1];
+
+                // Clear it so the background is blank
+                f.render_widget(Clear, modal);
+
+                let mut targets = String::new();
+                for (idx, i) in state.state.targets.iter().enumerate() {
+                    // TODO get name of targets
+                    let name = i;
+                    targets.push_str(&format!("[{}]{} ", idx + 1, name));
+                }
+
+                let prompt = Paragraph::new(vec![
+                    Spans::from("Select a target"),
+                    Spans::from(Span::styled(
+                        targets,
+                        Style::default().fg(Color::LightGreen),
+                    )),
+                ])
+                    .block(Block::default()
+                           .borders(Borders::ALL)
+                           .style(Style::default().bg(Color::Black)))
+                    .alignment(Alignment::Center)
+                    .wrap(Wrap { trim: false });
+
+                f.render_widget(prompt, modal);
             }
         })?;
 
