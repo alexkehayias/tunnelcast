@@ -4,29 +4,20 @@
 //!
 //! See [this blog post](https://hoverbear.org/blog/rust-state-machine-pattern/)
 //! for more about this design
-use crate::engine::{Target, EntityId};
+use crate::engine::{EntityId, Target};
 
 /// A collection of shared state between different transitions. Useful
 /// so you don't need to duplicate the same attributes across multiple
 /// states.
-pub struct SharedState {
-    /// Card played by index in the hand
-    pub card_idx: Option<i32>,
-    // TODO replace with a vector of enemies
-    /// The enemy ID in the current combat stage
-    pub enemy_id: EntityId,
-}
+pub struct SharedState {}
 
 pub struct GuiStateMachine<T> {
-    pub state: T
-}
-
-pub struct GuiStateMachineWithArgs<T> {
     pub state: T,
 }
 
-pub trait TransitionFrom<T, R> {
-    fn transition_from(state: T, args: R) -> Self;
+pub trait TransitionFrom<T> {
+    type Args;
+    fn transition_from(state: T, args: Self::Args) -> Self;
 }
 
 pub trait GuiState {
@@ -34,140 +25,86 @@ pub trait GuiState {
     fn new(args: Self::Args) -> Self;
 }
 
-impl<T> GuiStateMachineWithArgs<T> where T: GuiState {
-    pub fn new(state: T) -> Self {
-        GuiStateMachineWithArgs { state }
-    }
+pub struct Combat {
+    pub shared_state: SharedState,
+    pub enemy_id: EntityId,
 }
 
-struct StateOne;
-impl GuiState for StateOne {
-    type Args = ();
-
-    fn new(args: Self::Args) -> Self {
-        Self {}
-    }
-}
-
-struct StateTwo;
-impl GuiState for StateTwo {
-    type Args = ();
-
-    fn new(args: Self::Args) -> Self {
-        Self {}
-    }
-}
-
-struct StateThree;
-impl GuiState for StateThree {
-    type Args = ();
-
-    fn new(args: Self::Args) -> Self {
-        Self {}
-    }
-}
-
-impl TransitionFrom<GuiStateMachineWithArgs<StateOne>, ()> for GuiStateMachineWithArgs<StateTwo> {
-
-    fn transition_from(state: GuiStateMachineWithArgs<StateOne>, args: ()) -> GuiStateMachineWithArgs<StateTwo> {
-        GuiStateMachineWithArgs::new(StateTwo::new(args))
-    }
-}
-
-impl TransitionFrom<GuiStateMachineWithArgs<StateTwo>, ()> for GuiStateMachineWithArgs<StateThree> {
-
-    fn transition_from(state: GuiStateMachineWithArgs<StateTwo>, args: ()) -> GuiStateMachineWithArgs<StateThree> {
-        GuiStateMachineWithArgs::new(StateThree::new(args))
-    }
-}
-
-mod test_new_state_machine {
-    use super::*;
-
-    #[test]
-    fn test_transitions() {
-        let inner_state = StateOne::new(());
-        let state_one = GuiStateMachineWithArgs::new(inner_state);
-        let state_two = GuiStateMachineWithArgs::<StateTwo>::transition_from(state_one, ());
-        // This won't compile because it's not a valid transition
-        // GuiStateMachineWithArgs::<StateThree>::transition_from(state_one, ());
+impl Combat {
+    pub fn new(enemy_id: EntityId) -> Self {
+        Combat {
+            shared_state: SharedState {},
+            enemy_id,
+        }
     }
 }
 
 impl GuiStateMachine<Combat> {
-    pub fn new(card_idx: Option<i32>, enemy_id: EntityId) -> Self {
+    pub fn new(enemy_id: EntityId) -> Self {
         GuiStateMachine {
-            state: Combat {
-                shared_state: SharedState {
-                    card_idx,
-                    enemy_id,
-                }
-            }
+            state: Combat::new(enemy_id)
         }
     }
 }
 
-pub struct Combat {
+pub struct PlayCard {
     pub shared_state: SharedState,
+    pub card_idx: u32,
+}
+
+impl PlayCard {
+    pub fn new(card_idx: u32, enemy_id: EntityId) -> Self {
+        PlayCard {
+            shared_state: SharedState {},
+            card_idx: card_idx,
+        }
+    }
+}
+
+pub struct PlayCardArgs {
+    pub card_idx: u32,
+}
+
+impl TransitionFrom<&GuiStateMachine<Combat>> for GuiStateMachine<PlayCard> {
+    type Args = PlayCardArgs;
+
+    fn transition_from(
+        fsm: &GuiStateMachine<Combat>,
+        args: PlayCardArgs,
+    ) -> GuiStateMachine<PlayCard> {
+        GuiStateMachine {
+            state: PlayCard {
+                shared_state: SharedState {},
+                card_idx: args.card_idx,
+            },
+        }
+    }
 }
 
 pub struct TargetSelect {
     pub shared_state: SharedState,
-    pub target_type: Target,
-    pub targets: Vec<EntityId>
+    pub targets: Vec<EntityId>,
+    pub card_idx: u32,
 }
 
-impl From<&GuiStateMachine<Combat>> for GuiStateMachine<TargetSelect> {
-    fn from(val: &GuiStateMachine<Combat>) -> GuiStateMachine<TargetSelect> {
-        let card_idx = val.state.shared_state.card_idx;
-        let enemy_id = val.state.shared_state.enemy_id;
-        let targets = vec![enemy_id];
+pub struct TargetSelectArgs {
+    pub targets: Vec<EntityId>,
+    pub card_idx: u32,
+}
 
+impl TransitionFrom<&GuiStateMachine<PlayCard>> for GuiStateMachine<TargetSelect> {
+    type Args = TargetSelectArgs;
+
+    fn transition_from(
+        fsm: &GuiStateMachine<PlayCard>,
+        args: TargetSelectArgs,
+    ) -> GuiStateMachine<TargetSelect> {
         GuiStateMachine {
             state: TargetSelect {
-                // HACK: Constructing the shared state manually to
-                // avoid a borrowck error because we're using
-                // state.shared_state to create the vector of targets
-                shared_state: SharedState {
-                    card_idx,
-                    enemy_id,
-                },
-                target_type: Target::Single,
-                targets: targets
-            }
-        }
-    }
-}
-
-
-impl From<&GuiStateMachine<TargetSelect>> for GuiStateMachine<Combat> {
-    fn from(val: &GuiStateMachine<TargetSelect>) -> GuiStateMachine<Combat> {
-        let card_idx = val.state.shared_state.card_idx;
-        let enemy_id = val.state.shared_state.enemy_id;
-
-        GuiStateMachine {
-            state: Combat {
-                shared_state: SharedState {
-                    card_idx,
-                    enemy_id,
-                }
-            }
-        }
-    }
-}
-
-impl From<&mut GuiStateMachine<TargetSelect>> for GuiStateMachine<Combat> {
-    fn from(val: &mut GuiStateMachine<TargetSelect>) -> GuiStateMachine<Combat> {
-        let card_idx = val.state.shared_state.card_idx;
-        let enemy_id = val.state.shared_state.enemy_id;
-
-        GuiStateMachine {
-            state: Combat {
-                shared_state: SharedState {
-                    card_idx,
-                    enemy_id,
-                }
-            }
+                shared_state: SharedState {},
+                targets: args.targets,
+                card_idx: args.card_idx,
+            },
         }
     }
 }
@@ -176,28 +113,65 @@ pub struct TargetSelectComplete {
     pub shared_state: SharedState,
     /// The selected target for the played card
     pub target: EntityId,
+    pub card_idx: u32,
 }
 
-// mod test_gui_state_machine {
-//     use super::*;
+pub struct TargetSelectCompleteArgs {
+    pub target: EntityId,
+}
 
-//     #[test]
-//     fn test_integration() {
-//         let card_idx = 0;
-//         let enemy_id = 1;
-//         let combat_state = GuiStateMachine::<Combat>::new(Some(card_idx), enemy_id);
+impl TransitionFrom<&GuiStateMachine<TargetSelect>> for GuiStateMachine<TargetSelectComplete> {
+    type Args = TargetSelectCompleteArgs;
 
-//         // Simulate the user selecting a target
-//         let targeting_state = GuiStateMachine::<TargetSelect>::from(&combat_state);
+    fn transition_from(
+        fsm: &GuiStateMachine<TargetSelect>,
+        args: TargetSelectCompleteArgs,
+    ) -> GuiStateMachine<TargetSelectComplete> {
+        GuiStateMachine {
+            state: TargetSelectComplete {
+                shared_state: SharedState {},
+                target: args.target,
+                card_idx: fsm.state.card_idx,
+            },
+        }
+    }
+}
 
-//         let target_select_complete_state = GuiStateMachine::<TargetSelectComplete>::from(&targeting_state);
+mod test_gui_state_machine {
+    use super::*;
 
-//         targeting_state.state.shared_state.target_id = Some(enemy_id);
-//         let combat_state_with_target = GuiStateMachine::<Combat>::from(&targeting_state);
+    #[test]
+    fn test_transitions() {
+        let card_idx = 0;
+        let enemy_id = 1;
 
-//         assert_eq!(
-//             combat_state_with_target.state.shared_state.target_id.unwrap(),
-//             enemy_id
-//         );
-//     }
-// }
+        // Initial state
+        let combat_state = GuiStateMachine {
+            state: Combat {
+                shared_state: SharedState {},
+                enemy_id,
+            },
+        };
+
+        // Simulate playing a card
+        let play_card_state =
+            GuiStateMachine::<PlayCard>::transition_from(&combat_state, PlayCardArgs { card_idx });
+
+        // Simulate the user selecting a target
+        let targeting_state = GuiStateMachine::<TargetSelect>::transition_from(
+            &play_card_state,
+            TargetSelectArgs {
+                targets: vec![enemy_id],
+                card_idx,
+            },
+        );
+
+        // Simulate choosing enemy as target
+        let target_select_complete_state = GuiStateMachine::<TargetSelectComplete>::transition_from(
+            &targeting_state,
+            TargetSelectCompleteArgs { target: enemy_id },
+        );
+
+        assert_eq!(target_select_complete_state.state.target, enemy_id);
+    }
+}

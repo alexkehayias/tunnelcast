@@ -46,6 +46,7 @@ const SPACE_SHIP: &str = "
 enum GuiState {
     Combat(GuiStateMachine<Combat>),
     TargetSelect(GuiStateMachine<TargetSelect>),
+    TargetSelectComplete(GuiStateMachine<TargetSelectComplete>),
 }
 
 struct Game {
@@ -113,7 +114,6 @@ impl Game {
     fn new() -> Self {
         let game_state = Self::init_state();
         let gui_state = GuiState::Combat(GuiStateMachine::<Combat>::new(
-            None,
             game_state.enemy.unwrap(),
         ));
 
@@ -307,9 +307,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                         Key::Char(num_char) => {
                             if ['1', '2', '3', '4', '5', '6', '7', '8', '9'].contains(&num_char) && num_char.to_digit(10).unwrap() <= game.game_state.hand.len() as u32 {
                                 let card_idx = num_char.to_digit(10).unwrap() as usize;
-                                let card_idx = card_idx - 1; // Convert to vector index
-                                let card_id = game.game_state.hand[card_idx];
+                                let card_idx = (card_idx - 1) as u32; // Convert to vector index
+                                let card_id = game.game_state.hand[card_idx as usize];
                                 let selected_card = game.game_state.cards.get(&card_id).unwrap();
+
+                                let next_gui_state = GuiStateMachine::<PlayCard>::transition_from(state, PlayCardArgs { card_idx });
 
                                 // Determine the target of the card or
                                 // prompt the user
@@ -320,8 +322,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                                     Target::Single => {
                                         // TODO If there is only a single
                                         // enemy then skip the transition
-                                        let mut next_gui_state = GuiStateMachine::<TargetSelect>::from(state);
-                                        next_gui_state.state.shared_state.card_idx = Some(card_idx as i32);
+                                        let enemy = game.game_state.enemy.expect("Can't target if there are no enemies");
+                                        let next_gui_state = GuiStateMachine::<TargetSelect>::transition_from(
+                                            &next_gui_state,
+                                            TargetSelectArgs {card_idx, targets: vec![enemy]}
+                                        );
                                         game.gui_state = GuiState::TargetSelect(next_gui_state);
                                     }
                                 }
@@ -338,27 +343,19 @@ fn run() -> Result<(), Box<dyn Error>> {
                 match events.next()? {
                     Event::Input(input) => match input {
                         Key::Char('q') => {
-                            // TODO cancel by moving back to previous
-                            // GUI state
-                            // break;
+                            // Cancel by resetting back to initial GUI
+                            // state
+                            let next_gui_state = GuiStateMachine::<Combat>::new(game.game_state.enemy.unwrap());
+                            game.gui_state = GuiState::Combat(next_gui_state);
                         }
                         Key::Char('1') => {
                             // Transition back to Combat state and
                             // play the card now that the player
                             // selected a target
                             let entity_idx = 1;
-                            let target_id = game.game_state.entities[entity_idx];
-
-                            // TODO this feels wrong, probably an
-                            // indication there should actually be
-                            // another state to transition to and
-                            // target_id should not be in shared state
-                            // state.state.shared_state.target_id = Some(target_id);
-                            let card_idx = state.state.shared_state.card_idx.unwrap();
-
-                            let next_gui_state = GuiStateMachine::<Combat>::from(state);
-                            game.gui_state = GuiState::Combat(next_gui_state);
-                            game.game_state.action = Action::PlayCard(target_id, card_idx);
+                            let target = game.game_state.entities[entity_idx];
+                            let next_gui_state = GuiStateMachine::<TargetSelectComplete>::transition_from(state, TargetSelectCompleteArgs { target });
+                            game.gui_state = GuiState::TargetSelectComplete(next_gui_state);
                         }
                         _ => {}
                     },
@@ -367,9 +364,19 @@ fn run() -> Result<(), Box<dyn Error>> {
                     }
                 }
             },
+            GuiState::TargetSelectComplete(ref state) => {
+                // Reset to combat state
+                // TODO maybe make this an explicit transition?
+                let target_id = state.state.target;
+                let card_idx = state.state.card_idx;
+
+                let next_gui_state = GuiStateMachine::<Combat>::new(game.game_state.enemy.unwrap());
+                game.gui_state = GuiState::Combat(next_gui_state);
+
+                // Set the action to be processed next tick
+                game.game_state.action = Action::PlayCard(target_id, card_idx as i32);
+            }
         }
-
-
     }
 
     Ok(())
