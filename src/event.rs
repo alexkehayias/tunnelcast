@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 /// Copied from tui-rs example utils
-
 use std::io;
 use std::sync::mpsc;
 use std::sync::{

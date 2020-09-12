@@ -1,21 +1,14 @@
-use std::{error::Error, io, time::Duration};
-use std::panic::{self, PanicInfo};
 use backtrace::Backtrace;
+use std::panic::{self, PanicInfo};
+use std::{error::Error, io, time::Duration};
 
-use termion::{
-    event::Key,
-    input::MouseTerminal,
-    raw::IntoRawMode,
-    screen::AlternateScreen,
-};
+use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
-    layout::{Constraint, Direction, Layout, Alignment},
-    style::{Modifier, Style, Color},
-    text::{Spans, Span},
-    widgets::{
-        Block, Borders, List, ListItem, Paragraph, Wrap
-    },
+    layout::{Alignment, Constraint, Direction, Layout},
+    style::{Color, Modifier, Style},
+    text::{Span, Spans},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Terminal,
 };
 
@@ -26,7 +19,6 @@ mod gui;
 use engine::*;
 use event::{Config, Event, Events};
 use gui::*;
-
 
 const SPACE_SHIP: &str = "
                            |-----------|
@@ -58,23 +50,19 @@ impl Game {
     fn init_state() -> GameState {
         let mut cards = CardCollection::new();
 
-        cards.insert(
-            Card {
-                id: CardId::Shields,
-                name: "Shields",
-                effects: vec![Box::new(IncreaseShields {})],
-                target: Target::Player
-            }
-        );
+        cards.insert(Card {
+            id: CardId::Shields,
+            name: "Shields",
+            effects: vec![Box::new(IncreaseShields {})],
+            target: Target::Player,
+        });
 
-        cards.insert(
-            Card {
-                id: CardId::Phasers,
-                name: "Phasers",
-                effects: vec![Box::new(DamageHull {})],
-                target: Target::Single
-            }
-        );
+        cards.insert(Card {
+            id: CardId::Phasers,
+            name: "Phasers",
+            effects: vec![Box::new(DamageHull {})],
+            target: Target::Single,
+        });
 
         let mut init_deck = vec![
             CardId::Shields,
@@ -113,13 +101,11 @@ impl Game {
 
     fn new() -> Self {
         let game_state = Self::init_state();
-        let gui_state = GuiState::Combat(GuiStateMachine::<Combat>::new(
-            game_state.enemy.unwrap(),
-        ));
+        let gui_state = GuiState::Combat(GuiStateMachine::<Combat>::new(game_state.enemy.unwrap()));
 
         Self {
             game_state,
-            gui_state
+            gui_state,
         }
     }
 
@@ -180,15 +166,22 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(10),
-                              Constraint::Percentage(40),
-                              Constraint::Percentage(40),
-                              Constraint::Percentage(10)].as_ref())
+                .constraints(
+                    [
+                        Constraint::Percentage(10),
+                        Constraint::Percentage(40),
+                        Constraint::Percentage(40),
+                        Constraint::Percentage(10),
+                    ]
+                    .as_ref(),
+                )
                 .split(f.size());
 
             // Display the player's status
 
-            let player_state = game_state.entity_state.get(&game_state.player)
+            let player_state = game_state
+                .entity_state
+                .get(&game_state.player)
                 .expect("Failed to get player's state")
                 .get_state();
 
@@ -208,7 +201,9 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             // Display the enemy
 
-            let enemy_state = game_state.entity_state.get(&game_state.enemy.unwrap())
+            let enemy_state = game_state
+                .entity_state
+                .get(&game_state.enemy.unwrap())
                 .expect("Failed to get enemy's state")
                 .get_state();
 
@@ -218,9 +213,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 enemy_state.get(&Attribute::Hull).unwrap(),
             );
 
-            let mut text: Vec<Spans> = SPACE_SHIP.split('\n')
-                .map(|l| Spans::from(l))
-                .collect();
+            let mut text: Vec<Spans> = SPACE_SHIP.split('\n').map(|l| Spans::from(l)).collect();
             text.push(Spans::from(""));
             text.push(Spans::from(enemy_status));
 
@@ -234,23 +227,32 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             let horizontal_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(25),
-                              Constraint::Percentage(50),
-                              Constraint::Percentage(25)].as_ref())
+                .constraints(
+                    [
+                        Constraint::Percentage(25),
+                        Constraint::Percentage(50),
+                        Constraint::Percentage(25),
+                    ]
+                    .as_ref(),
+                )
                 .split(chunks[2]);
 
-            let draw_pile = Block::default().title("List").borders(Borders::ALL).title("Draw");
+            let draw_pile = Block::default()
+                .title("List")
+                .borders(Borders::ALL)
+                .title("Draw");
             f.render_widget(draw_pile, horizontal_chunks[0]);
 
-            let items: Vec<ListItem> = game_state.hand.iter()
+            let items: Vec<ListItem> = game_state
+                .hand
+                .iter()
                 .map(|i| ListItem::new(game_state.cards.get(i).unwrap().name))
                 .collect();
 
             let list = List::new(items)
                 .block(Block::default().borders(Borders::ALL).title("Hand"))
                 .style(Style::default().fg(Color::White))
-                .highlight_style(
-                    Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
                 .highlight_symbol(">>");
 
             f.render_widget(list, horizontal_chunks[1]);
@@ -260,8 +262,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let discard_pile = List::new(discard_items)
                 .block(Block::default().borders(Borders::ALL).title("Discard"))
                 .style(Style::default().fg(Color::White))
-                .highlight_style(
-                    Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
                 .highlight_symbol(">>");
 
             f.render_widget(discard_pile, horizontal_chunks[2]);
@@ -276,14 +277,16 @@ fn run() -> Result<(), Box<dyn Error>> {
                 cards_to_play.push_str(&format!("[{}]{} ", idx + 1, name));
             }
 
-            let prompt = Paragraph::new(
-                vec![
-                    Spans::from("Select a card to play"),
-                    Spans::from(Span::styled(cards_to_play, Style::default().fg(Color::LightGreen)))
-                ])
-                .block(Block::default().borders(Borders::ALL))
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: false });
+            let prompt = Paragraph::new(vec![
+                Spans::from("Select a card to play"),
+                Spans::from(Span::styled(
+                    cards_to_play,
+                    Style::default().fg(Color::LightGreen),
+                )),
+            ])
+            .block(Block::default().borders(Borders::ALL))
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: false });
 
             f.render_widget(prompt, chunks[3]);
 
@@ -305,28 +308,44 @@ fn run() -> Result<(), Box<dyn Error>> {
                             game.game_state.action = Action::EndTurn;
                         }
                         Key::Char(num_char) => {
-                            if ['1', '2', '3', '4', '5', '6', '7', '8', '9'].contains(&num_char) && num_char.to_digit(10).unwrap() <= game.game_state.hand.len() as u32 {
+                            if ['1', '2', '3', '4', '5', '6', '7', '8', '9'].contains(&num_char)
+                                && num_char.to_digit(10).unwrap()
+                                    <= game.game_state.hand.len() as u32
+                            {
                                 let card_idx = num_char.to_digit(10).unwrap() as usize;
                                 let card_idx = (card_idx - 1) as u32; // Convert to vector index
                                 let card_id = game.game_state.hand[card_idx as usize];
                                 let selected_card = game.game_state.cards.get(&card_id).unwrap();
 
-                                let next_gui_state = GuiStateMachine::<PlayCard>::transition_from(state, PlayCardArgs { card_idx });
+                                let next_gui_state = GuiStateMachine::<PlayCard>::transition_from(
+                                    state,
+                                    PlayCardArgs { card_idx },
+                                );
 
                                 // Determine the target of the card or
                                 // prompt the user
                                 match selected_card.target {
                                     Target::Player => {
-                                        game.game_state.action = Action::PlayCard(game.game_state.player, card_idx as i32);
+                                        game.game_state.action = Action::PlayCard(
+                                            game.game_state.player,
+                                            card_idx as i32,
+                                        );
                                     }
                                     Target::Single => {
                                         // TODO If there is only a single
                                         // enemy then skip the transition
-                                        let enemy = game.game_state.enemy.expect("Can't target if there are no enemies");
-                                        let next_gui_state = GuiStateMachine::<TargetSelect>::transition_from(
-                                            &next_gui_state,
-                                            TargetSelectArgs {card_idx, targets: vec![enemy]}
-                                        );
+                                        let enemy = game
+                                            .game_state
+                                            .enemy
+                                            .expect("Can't target if there are no enemies");
+                                        let next_gui_state =
+                                            GuiStateMachine::<TargetSelect>::transition_from(
+                                                &next_gui_state,
+                                                TargetSelectArgs {
+                                                    card_idx,
+                                                    targets: vec![enemy],
+                                                },
+                                            );
                                         game.gui_state = GuiState::TargetSelect(next_gui_state);
                                     }
                                 }
@@ -338,14 +357,15 @@ fn run() -> Result<(), Box<dyn Error>> {
                         game.update();
                     }
                 }
-            },
+            }
             GuiState::TargetSelect(ref mut state) => {
                 match events.next()? {
                     Event::Input(input) => match input {
                         Key::Char('q') => {
                             // Cancel by resetting back to initial GUI
                             // state
-                            let next_gui_state = GuiStateMachine::<Combat>::new(game.game_state.enemy.unwrap());
+                            let next_gui_state =
+                                GuiStateMachine::<Combat>::new(game.game_state.enemy.unwrap());
                             game.gui_state = GuiState::Combat(next_gui_state);
                         }
                         Key::Char('1') => {
@@ -354,7 +374,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                             // selected a target
                             let entity_idx = 1;
                             let target = game.game_state.entities[entity_idx];
-                            let next_gui_state = GuiStateMachine::<TargetSelectComplete>::transition_from(state, TargetSelectCompleteArgs { target });
+                            let next_gui_state =
+                                GuiStateMachine::<TargetSelectComplete>::transition_from(
+                                    state,
+                                    TargetSelectCompleteArgs { target },
+                                );
                             game.gui_state = GuiState::TargetSelectComplete(next_gui_state);
                         }
                         _ => {}
@@ -363,7 +387,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                         game.update();
                     }
                 }
-            },
+            }
             GuiState::TargetSelectComplete(ref state) => {
                 // Reset to combat state
                 // TODO maybe make this an explicit transition?

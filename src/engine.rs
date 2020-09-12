@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use std::cmp::{Eq, PartialEq};
+use std::collections::HashMap;
 use std::hash::Hash;
 
 use rand::seq::SliceRandom;
@@ -42,7 +42,7 @@ fn gen_id() -> EntityId {
 // For now, combining entities with state for simplicity.
 #[derive(Debug)]
 pub struct Player {
-    pub state: State
+    pub state: State,
 }
 impl Entity for Player {
     fn get_state(&self) -> &State {
@@ -107,7 +107,7 @@ pub struct Card {
     pub id: CardId,
     pub name: &'static str,
     pub effects: Vec<Box<dyn Effect>>,
-    pub target: Target
+    pub target: Target,
 }
 
 #[derive(Debug)]
@@ -149,7 +149,9 @@ impl GameState {
     }
 
     fn remove_entity(&mut self, entity_id: &EntityId) {
-        let index = self.entities.iter()
+        let index = self
+            .entities
+            .iter()
             .position(|x| x == entity_id)
             .expect("EntityId not found");
         self.entities.remove(index);
@@ -158,7 +160,9 @@ impl GameState {
 
     fn apply_effect(&mut self, state_change: StateChange) {
         let (entity_id, state) = state_change;
-        let entity_state = self.entity_state.get_mut(&entity_id)
+        let entity_state = self
+            .entity_state
+            .get_mut(&entity_id)
             .expect("Failed to get entity")
             .get_state_mut();
 
@@ -192,10 +196,11 @@ pub fn tick(game: &mut GameState) -> &mut GameState {
             if let Some(card) = game.draw.pop() {
                 game.hand.push(card);
             };
-        },
+        }
         Action::PlayCard(target_ent_id, card_idx) => {
             let card_id = &game.hand[card_idx as usize];
-            let card = &game.cards
+            let card = &game
+                .cards
                 .get(card_id)
                 .unwrap_or_else(|| panic!("Could not find card with ID {:?}", card_id));
 
@@ -222,10 +227,10 @@ pub fn tick(game: &mut GameState) -> &mut GameState {
             // borrow error because card_id still immutably borrows
             // GameState and apply_effect needs a mutable reference
             game.apply_effect((target_ent_id, accum));
-        },
+        }
         Action::BeginTurn => {
             draw_hand(game, 4);
-        },
+        }
         Action::EndTurn => {
             discard_hand(game);
         }
@@ -260,12 +265,14 @@ fn discard_hand(game: &mut GameState) -> &mut GameState {
 
 #[derive(Debug)]
 pub struct CardCollection {
-    inner: HashMap<CardId, Card>
+    inner: HashMap<CardId, Card>,
 }
 
 impl CardCollection {
     pub fn new() -> Self {
-        Self {inner: HashMap::new()}
+        Self {
+            inner: HashMap::new(),
+        }
     }
 
     pub fn insert(&mut self, card: Card) {
@@ -293,11 +300,7 @@ mod test_game {
         assert_eq!(game.hand, vec![], "Hand should be empty");
 
         // Try with a draw pile of three cards and try to draw four
-        let expected_hand = vec![
-            CardId::Phasers,
-            CardId::Phasers,
-            CardId::Phasers
-        ];
+        let expected_hand = vec![CardId::Phasers, CardId::Phasers, CardId::Phasers];
         game.draw = expected_hand.clone();
         draw_hand(&mut game, 4);
         assert_eq!(expected_hand, game.hand);
@@ -312,14 +315,11 @@ mod test_game {
         let mut game = GameState::new(cards, init_deck);
 
         // Try with a draw pile of three cards and try to draw four
-        game.hand = vec![
-            CardId::Phasers,
-            CardId::Phasers,
-        ];
+        game.hand = vec![CardId::Phasers, CardId::Phasers];
         discard_hand(&mut game);
         assert!(game.hand.is_empty(), "Hand should be empty");
         assert_eq!(
-            vec![CardId::Phasers,CardId::Phasers],
+            vec![CardId::Phasers, CardId::Phasers],
             game.discard,
             "Cards from the hand should all be in the discard pile"
         )
@@ -344,16 +344,16 @@ mod test_game {
             id: CardId::Shields,
             name: "Shields",
             effects: vec![Box::new(IncreaseShields {})],
-            target: Target::Player
+            target: Target::Player,
         };
 
         // Apply state change for the card
-        let state_change = card.effects[0]
-            .calculate(&game, player_id);
+        let state_change = card.effects[0].calculate(&game, player_id);
         game.apply_effect((player_id, state_change));
 
         assert_eq!(
-            game.entity_state.get_mut(&player_id)
+            game.entity_state
+                .get_mut(&player_id)
                 .unwrap()
                 .get_state()
                 .get(&Attribute::Shields)
@@ -366,23 +366,19 @@ mod test_game {
     fn test_integration() {
         let mut cards = CardCollection::new();
 
-        cards.insert(
-            Card {
-                id: CardId::Shields,
-                name: "Shields",
-                effects: vec![Box::new(IncreaseShields {})],
-                target: Target::Player
-            }
-        );
+        cards.insert(Card {
+            id: CardId::Shields,
+            name: "Shields",
+            effects: vec![Box::new(IncreaseShields {})],
+            target: Target::Player,
+        });
 
-        cards.insert(
-            Card {
-                id: CardId::Phasers,
-                name: "Phasers",
-                effects: vec![Box::new(DamageHull {})],
-                target: Target::Single,
-            }
-        );
+        cards.insert(Card {
+            id: CardId::Phasers,
+            name: "Phasers",
+            effects: vec![Box::new(DamageHull {})],
+            target: Target::Single,
+        });
 
         let mut init_deck = vec![
             CardId::Shields,
