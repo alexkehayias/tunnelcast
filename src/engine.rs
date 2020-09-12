@@ -31,6 +31,7 @@ pub enum Attribute {
 pub type EntityId = u32;
 
 pub trait Entity: std::fmt::Debug {
+    fn get_name(&self) -> &String;
     fn get_state(&self) -> &State;
     fn get_state_mut(&mut self) -> &mut State;
 }
@@ -43,8 +44,14 @@ fn gen_id() -> EntityId {
 #[derive(Debug)]
 pub struct Player {
     pub state: State,
+    pub name: String,
 }
+
 impl Entity for Player {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
     fn get_state(&self) -> &State {
         &self.state
     }
@@ -56,9 +63,14 @@ impl Entity for Player {
 
 #[derive(Debug)]
 pub struct Enemy {
+    pub name: String,
     pub state: State,
 }
 impl Entity for Enemy {
+    fn get_name(&self) -> &String {
+        &self.name
+    }
+
     fn get_state(&self) -> &State {
         &self.state
     }

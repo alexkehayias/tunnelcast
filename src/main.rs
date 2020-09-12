@@ -5,7 +5,7 @@ use std::{error::Error, io, time::Duration};
 use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{
     backend::TermionBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap, Clear},
@@ -80,7 +80,7 @@ impl Game {
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
-        let player = Player { state: s };
+        let player = Player { name: String::from("Player"), state: s };
         let player_id = 1;
         game_state.add_entity(Some(player_id), Box::new(player));
         game_state.player = player_id;
@@ -89,7 +89,7 @@ impl Game {
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
-        let enemy = Enemy { state: s };
+        let enemy = Enemy { name: String::from("Battleship"), state: s };
         let enemy_id = 2;
         game_state.add_entity(Some(enemy_id), Box::new(enemy));
         game_state.enemy = Some(enemy_id);
@@ -322,8 +322,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
                 let mut targets = String::new();
                 for (idx, i) in state.state.targets.iter().enumerate() {
-                    // TODO get name of targets
-                    let name = i;
+                    let name = &*game_state.entity_state.get(i).unwrap().get_name();
                     targets.push_str(&format!("[{}]{} ", idx + 1, name));
                 }
 
