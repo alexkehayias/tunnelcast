@@ -109,11 +109,115 @@ impl Game {
         }
     }
 
-    fn update(&mut self) {
+    fn handle_keyboard_input(&mut self, input: Key) -> &mut Self {
+        match self.gui_state {
+            GuiState::Combat(ref state) => {
+                match input {
+                    Key::Char('q') => {
+                        // break;
+                    }
+                    Key::Char('e') => {
+                        self.game_state.action = Action::EndTurn;
+                    }
+                    Key::Char(num_char) => {
+                        if ['1', '2', '3', '4', '5', '6', '7', '8', '9'].contains(&num_char)
+                            && num_char.to_digit(10).unwrap()
+                            <= self.game_state.hand.len() as u32
+                        {
+                            let card_idx = num_char.to_digit(10).unwrap() as usize;
+                            let card_idx = (card_idx - 1) as u32; // Convert to vector index
+                            let card_id = self.game_state.hand[card_idx as usize];
+                            let selected_card = self.game_state.cards.get(&card_id).unwrap();
+
+                            let next_gui_state = GuiStateMachine::<PlayCard>::transition_from(
+                                state,
+                                PlayCardArgs { card_idx },
+                            );
+
+                            // Determine the target of the card or
+                            // prompt the user
+                            match selected_card.target {
+                                Target::Player => {
+                                    self.game_state.action = Action::PlayCard(
+                                        self.game_state.player,
+                                        card_idx as i32,
+                                    );
+                                }
+                                Target::Single => {
+                                    // TODO If there is only a single
+                                    // enemy then skip the transition
+                                    let enemy = self
+                                        .game_state
+                                        .enemy
+                                        .expect("Can't target if there are no enemies");
+                                    let next_gui_state =
+                                        GuiStateMachine::<TargetSelect>::transition_from(
+                                            &next_gui_state,
+                                            TargetSelectArgs {
+                                                card_idx,
+                                                targets: vec![enemy],
+                                            },
+                                        );
+                                    self.gui_state = GuiState::TargetSelect(next_gui_state);
+                                }
+                            }
+                        }
+                    }
+                    _ => ()
+                }
+            }
+            GuiState::TargetSelect(ref mut state) => {
+                match input {
+                    Key::Char('q') => {
+                        // Cancel by resetting back to initial GUI
+                        // state
+                        let next_gui_state =
+                            GuiStateMachine::<Combat>::new(self.game_state.enemy.unwrap());
+                        self.gui_state = GuiState::Combat(next_gui_state);
+                    }
+                    Key::Char('1') => {
+                        // Transition back to Combat state and
+                        // play the card now that the player
+                        // selected a target
+                        let entity_idx = 1;
+                        let target = self.game_state.entities[entity_idx];
+                        let next_gui_state =
+                            GuiStateMachine::<TargetSelectComplete>::transition_from(
+                                state,
+                                TargetSelectCompleteArgs { target },
+                            );
+                        self.gui_state = GuiState::TargetSelectComplete(next_gui_state);
+                    }
+                    _ => {}
+                }
+            }
+            // TODO this shouldn't be here since it's not
+            // actually handling any user input, just handling the
+            // state machine
+            GuiState::TargetSelectComplete(ref state) => {
+                // Reset to combat state
+                // TODO maybe make this an explicit transition?
+                let target_id = state.state.target;
+                let card_idx = state.state.card_idx;
+
+                let next_gui_state = GuiStateMachine::<Combat>::new(self.game_state.enemy.unwrap());
+                self.gui_state = GuiState::Combat(next_gui_state);
+
+                // Set the action to be processed next tick
+                self.game_state.action = Action::PlayCard(target_id, card_idx as i32);
+            }
+        }
+
+        self
+    }
+
+    fn update(&mut self) -> &mut Self {
         // Move the game forward one tick
         tick(&mut self.game_state);
         // Await user input
         self.game_state.action = Action::Await;
+
+        self
     }
 }
 
@@ -197,6 +301,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let status_bar = Paragraph::new(player_status)
                 .block(Block::default().borders(Borders::ALL).title("Status"))
                 .alignment(Alignment::Center);
+
             f.render_widget(status_bar, chunks[0]);
 
             // Display the enemy
@@ -221,6 +326,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .block(Block::default().borders(Borders::ALL))
                 .style(Style::default().fg(Color::LightYellow))
                 .alignment(Alignment::Left);
+
             f.render_widget(paragraph, chunks[1]);
 
             // Show the deck piles (draw pile, hand, discard pile)
@@ -241,6 +347,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .title("List")
                 .borders(Borders::ALL)
                 .title("Draw");
+
             f.render_widget(draw_pile, horizontal_chunks[0]);
 
             let items: Vec<ListItem> = game_state
@@ -343,112 +450,10 @@ fn run() -> Result<(), Box<dyn Error>> {
             }
         })?;
 
-        // Input events are handled differently depending on the UI
-        // state machine
-        match game.gui_state {
-            GuiState::Combat(ref state) => {
-                match events.next()? {
-                    Event::Input(input) => match input {
-                        Key::Char('q') => {
-                            break;
-                        }
-                        Key::Char('e') => {
-                            game.game_state.action = Action::EndTurn;
-                        }
-                        Key::Char(num_char) => {
-                            if ['1', '2', '3', '4', '5', '6', '7', '8', '9'].contains(&num_char)
-                                && num_char.to_digit(10).unwrap()
-                                    <= game.game_state.hand.len() as u32
-                            {
-                                let card_idx = num_char.to_digit(10).unwrap() as usize;
-                                let card_idx = (card_idx - 1) as u32; // Convert to vector index
-                                let card_id = game.game_state.hand[card_idx as usize];
-                                let selected_card = game.game_state.cards.get(&card_id).unwrap();
-
-                                let next_gui_state = GuiStateMachine::<PlayCard>::transition_from(
-                                    state,
-                                    PlayCardArgs { card_idx },
-                                );
-
-                                // Determine the target of the card or
-                                // prompt the user
-                                match selected_card.target {
-                                    Target::Player => {
-                                        game.game_state.action = Action::PlayCard(
-                                            game.game_state.player,
-                                            card_idx as i32,
-                                        );
-                                    }
-                                    Target::Single => {
-                                        // TODO If there is only a single
-                                        // enemy then skip the transition
-                                        let enemy = game
-                                            .game_state
-                                            .enemy
-                                            .expect("Can't target if there are no enemies");
-                                        let next_gui_state =
-                                            GuiStateMachine::<TargetSelect>::transition_from(
-                                                &next_gui_state,
-                                                TargetSelectArgs {
-                                                    card_idx,
-                                                    targets: vec![enemy],
-                                                },
-                                            );
-                                        game.gui_state = GuiState::TargetSelect(next_gui_state);
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    },
-                    Event::Tick => {
-                        game.update();
-                    }
-                }
-            }
-            GuiState::TargetSelect(ref mut state) => {
-                match events.next()? {
-                    Event::Input(input) => match input {
-                        Key::Char('q') => {
-                            // Cancel by resetting back to initial GUI
-                            // state
-                            let next_gui_state =
-                                GuiStateMachine::<Combat>::new(game.game_state.enemy.unwrap());
-                            game.gui_state = GuiState::Combat(next_gui_state);
-                        }
-                        Key::Char('1') => {
-                            // Transition back to Combat state and
-                            // play the card now that the player
-                            // selected a target
-                            let entity_idx = 1;
-                            let target = game.game_state.entities[entity_idx];
-                            let next_gui_state =
-                                GuiStateMachine::<TargetSelectComplete>::transition_from(
-                                    state,
-                                    TargetSelectCompleteArgs { target },
-                                );
-                            game.gui_state = GuiState::TargetSelectComplete(next_gui_state);
-                        }
-                        _ => {}
-                    },
-                    Event::Tick => {
-                        game.update();
-                    }
-                }
-            }
-            GuiState::TargetSelectComplete(ref state) => {
-                // Reset to combat state
-                // TODO maybe make this an explicit transition?
-                let target_id = state.state.target;
-                let card_idx = state.state.card_idx;
-
-                let next_gui_state = GuiStateMachine::<Combat>::new(game.game_state.enemy.unwrap());
-                game.gui_state = GuiState::Combat(next_gui_state);
-
-                // Set the action to be processed next tick
-                game.game_state.action = Action::PlayCard(target_id, card_idx as i32);
-            }
-        }
+        match events.next()? {
+            Event::Tick => game.update(),
+            Event::Input(input) => game.handle_keyboard_input(input),
+        };
     }
 
     Ok(())

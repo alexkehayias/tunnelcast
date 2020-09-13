@@ -348,7 +348,7 @@ mod test_game {
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
-        let player = Player { state: s };
+        let player = Player { name: String::from("Player"), state: s };
         let player_id = game.add_entity(None, Box::new(player));
 
         // We'll test the shields card effects are applied correctly
@@ -408,7 +408,7 @@ mod test_game {
         let mut s = State::new();
         s.insert(Attribute::Hull, 10);
         s.insert(Attribute::Shields, 10);
-        let enemy = Enemy { state: s };
+        let enemy = Enemy { name: String::from("Test Enemy"), state: s };
         let enemy_id = game.add_entity(None, Box::new(enemy));
 
         // Run through a turn to make sure it works
