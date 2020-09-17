@@ -296,7 +296,7 @@ impl CardCollection {
     }
 }
 
-#[allow(unused_imports)]
+#[cfg(test)]
 mod test_game {
     use super::*;
 

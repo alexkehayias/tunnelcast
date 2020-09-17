@@ -113,9 +113,6 @@ impl Game {
         match self.gui_state {
             GuiState::Combat(ref state) => {
                 match input {
-                    Key::Char('q') => {
-                        // break;
-                    }
                     Key::Char('e') => {
                         self.game_state.action = Action::EndTurn;
                     }
@@ -212,6 +209,21 @@ impl Game {
     }
 
     fn update(&mut self) -> &mut Self {
+        match self.gui_state {
+            GuiState::TargetSelectComplete(ref state) => {
+                // Reset to combat state
+                // TODO maybe make this an explicit transition?
+                let target_id = state.state.target;
+                let card_idx = state.state.card_idx;
+
+                let next_gui_state = GuiStateMachine::<Combat>::new(self.game_state.enemy.unwrap());
+                self.gui_state = GuiState::Combat(next_gui_state);
+
+                // Set the action to be processed next tick
+                self.game_state.action = Action::PlayCard(target_id, card_idx as i32);
+            }
+            _ => ()
+        }
         // Move the game forward one tick
         tick(&mut self.game_state);
         // Await user input
@@ -452,6 +464,9 @@ fn run() -> Result<(), Box<dyn Error>> {
 
         match events.next()? {
             Event::Tick => game.update(),
+            Event::Input(Key::Char('q')) => {
+                break;
+            },
             Event::Input(input) => game.handle_keyboard_input(input),
         };
     }

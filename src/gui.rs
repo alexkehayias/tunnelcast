@@ -4,7 +4,7 @@
 //!
 //! See [this blog post](https://hoverbear.org/blog/rust-state-machine-pattern/)
 //! for more about this design
-use crate::engine::{EntityId, Target};
+use crate::engine::EntityId;
 
 /// A collection of shared state between different transitions. Useful
 /// so you don't need to duplicate the same attributes across multiple
@@ -52,15 +52,6 @@ pub struct PlayCard {
     pub card_idx: u32,
 }
 
-impl PlayCard {
-    pub fn new(card_idx: u32, enemy_id: EntityId) -> Self {
-        PlayCard {
-            shared_state: SharedState {},
-            card_idx: card_idx,
-        }
-    }
-}
-
 pub struct PlayCardArgs {
     pub card_idx: u32,
 }
@@ -69,7 +60,7 @@ impl TransitionFrom<&GuiStateMachine<Combat>> for GuiStateMachine<PlayCard> {
     type Args = PlayCardArgs;
 
     fn transition_from(
-        fsm: &GuiStateMachine<Combat>,
+        _fsm: &GuiStateMachine<Combat>,
         args: PlayCardArgs,
     ) -> GuiStateMachine<PlayCard> {
         GuiStateMachine {
@@ -96,7 +87,7 @@ impl TransitionFrom<&GuiStateMachine<PlayCard>> for GuiStateMachine<TargetSelect
     type Args = TargetSelectArgs;
 
     fn transition_from(
-        fsm: &GuiStateMachine<PlayCard>,
+        _fsm: &GuiStateMachine<PlayCard>,
         args: TargetSelectArgs,
     ) -> GuiStateMachine<TargetSelect> {
         GuiStateMachine {
@@ -137,6 +128,7 @@ impl TransitionFrom<&GuiStateMachine<TargetSelect>> for GuiStateMachine<TargetSe
     }
 }
 
+#[cfg(test)]
 mod test_gui_state_machine {
     use super::*;
 
